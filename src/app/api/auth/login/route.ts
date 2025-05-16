@@ -3,7 +3,16 @@ import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import { SignJWT } from "jose";
 
-const prisma = new PrismaClient();
+// 创建全局 Prisma 客户端实例
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined;
+};
+
+const prisma = globalForPrisma.prisma ?? new PrismaClient();
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
+}
 
 export async function POST(request: Request) {
   try {
@@ -21,6 +30,9 @@ export async function POST(request: Request) {
     // 查找用户
     const user = await prisma.user.findUnique({
       where: { email },
+      include: {
+        roles: true,
+      },
     });
 
     if (!user) {
@@ -52,7 +64,7 @@ export async function POST(request: Request) {
         id: user.id,
         email: user.email,
         name: user.name,
-        role: user.role,
+        roles: user.roles,
       },
     });
 

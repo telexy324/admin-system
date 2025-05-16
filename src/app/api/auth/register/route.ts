@@ -3,7 +3,16 @@ import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import { SignJWT } from "jose";
 
-const prisma = new PrismaClient();
+// 创建全局 Prisma 客户端实例
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined;
+};
+
+const prisma = globalForPrisma.prisma ?? new PrismaClient();
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
+}
 
 export async function POST(request: Request) {
   try {
@@ -33,13 +42,32 @@ export async function POST(request: Request) {
     // 加密密码
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // 查找默认用户角色
+    const defaultRole = await prisma.role.findFirst({
+      where: { name: "普通用户" },
+    });
+
+    if (!defaultRole) {
+      return NextResponse.json(
+        { error: "系统错误：默认角色不存在" },
+        { status: 500 }
+      );
+    }
+
     // 创建用户
     const user = await prisma.user.create({
       data: {
         email: username,
         password: hashedPassword,
         name: username,
-        role: "USER",
+        roles: {
+          connect: {
+            id: defaultRole.id,
+          },
+        },
+      },
+      include: {
+        roles: true,
       },
     });
 
@@ -56,7 +84,7 @@ export async function POST(request: Request) {
         id: user.id,
         email: user.email,
         name: user.name,
-        role: user.role,
+        roles: user.roles,
       },
     });
 
