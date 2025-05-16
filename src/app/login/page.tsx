@@ -66,6 +66,16 @@ export default function LoginPage() {
             <Button type="submit" className="w-full">
               登录
             </Button>
+            <div className="text-center text-sm">
+              还没有账号？{" "}
+              <button
+                type="button"
+                onClick={() => router.push("/register")}
+                className="text-primary hover:underline"
+              >
+                立即注册
+              </button>
+            </div>
           </form>
         </CardContent>
       </Card>
