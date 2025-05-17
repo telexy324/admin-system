@@ -2,80 +2,119 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/components/ui/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+const loginSchema = z.object({
+  email: z.string().email("请输入有效的邮箱地址"),
+  password: z.string().min(6, "密码至少需要6个字符"),
+});
+
+type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
+  });
 
+  const onSubmit = async (data: LoginFormData) => {
     try {
-      const res = await fetch("/api/auth/login", {
+      setIsLoading(true);
+      console.log('开始登录请求...');
+      
+      const response = await fetch("/api/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
       });
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || "登录失败");
+      const result = await response.json();
+      console.log('登录响应:', result);
+
+      if (!response.ok) {
+        throw new Error(result.error || "登录失败");
       }
 
-      router.push("/dashboard");
-    } catch (err: any) {
-      setError(err.message);
+      // 登录成功
+      toast({
+        title: "登录成功",
+        description: "正在跳转到首页...",
+      });
+
+      // 存储用户信息和 token
+      localStorage.setItem("user", JSON.stringify(result.user));
+      localStorage.setItem("token", result.token);
+
+      console.log('准备跳转到仪表盘...');
+      // 使用 replace 而不是 push
+      router.replace("/dashboard");
+    } catch (error) {
+      console.error('登录错误:', error);
+      toast({
+        title: "登录失败",
+        description: error instanceof Error ? error.message : "请稍后重试",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <Card className="w-[400px]">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-2xl text-center">系统登录</CardTitle>
+          <CardTitle className="text-2xl text-center">登录系统</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
+              <Label htmlFor="email">邮箱</Label>
               <Input
+                id="email"
                 type="email"
-                placeholder="邮箱"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
+                {...register("email")}
+                placeholder="请输入邮箱"
               />
+              {errors.email && (
+                <p className="text-sm text-red-500">{errors.email.message}</p>
+              )}
             </div>
             <div className="space-y-2">
+              <Label htmlFor="password">密码</Label>
               <Input
+                id="password"
                 type="password"
-                placeholder="密码"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
+                {...register("password")}
+                placeholder="请输入密码"
               />
+              {errors.password && (
+                <p className="text-sm text-red-500">{errors.password.message}</p>
+              )}
             </div>
-            {error && (
-              <div className="text-red-500 text-sm text-center">{error}</div>
-            )}
-            <Button type="submit" className="w-full">
-              登录
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={isLoading}
+            >
+              {isLoading ? "登录中..." : "登录"}
             </Button>
-            <div className="text-center text-sm">
-              还没有账号？{" "}
-              <button
-                type="button"
-                onClick={() => router.push("/register")}
-                className="text-primary hover:underline"
-              >
-                立即注册
-              </button>
-            </div>
           </form>
         </CardContent>
       </Card>
