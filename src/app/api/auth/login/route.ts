@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import { SignJWT } from "jose";
+import { compare } from 'bcryptjs';
+import { sign } from 'jsonwebtoken';
 
 // 创建全局 Prisma 客户端实例
 const globalForPrisma = globalThis as unknown as {
@@ -31,41 +33,51 @@ export async function POST(request: Request) {
     const user = await prisma.user.findUnique({
       where: { email },
       include: {
-        roles: true,
-      },
+        role: {
+          include: {
+            permissions: true,
+            menus: true
+          }
+        }
+      }
     });
 
     if (!user) {
       return NextResponse.json(
         { error: "用户不存在" },
-        { status: 400 }
+        { status: 404 }
       );
     }
 
     // 验证密码
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    const isValidPassword = await compare(password, user.password);
     if (!isValidPassword) {
       return NextResponse.json(
         { error: "密码错误" },
-        { status: 400 }
+        { status: 401 }
       );
     }
 
     // 生成 JWT token
-    const token = await new SignJWT({ userId: user.id })
-      .setProtectedHeader({ alg: "HS256" })
-      .setExpirationTime("24h")
-      .sign(new TextEncoder().encode(process.env.JWT_SECRET || "your-secret-key"));
+    const token = sign(
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role
+      },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '1d' }
+    );
 
     // 创建响应
     const response = NextResponse.json({
-      message: "登录成功",
       user: {
         id: user.id,
         email: user.email,
         name: user.name,
-        roles: user.roles,
+        role: user.role
       },
+      token
     });
 
     // 设置 cookie
