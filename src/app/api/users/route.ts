@@ -1,23 +1,23 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { PrismaClient } from "@prisma/client";
+import { auth } from "../auth/[...nextauth]/route";
+
+const prisma = new PrismaClient();
 
 // 获取用户列表
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     if (!session) {
       return NextResponse.json({ error: "未授权" }, { status: 401 });
     }
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get("page") || "1");
-    const pageSize = parseInt(searchParams.get("pageSize") || "10");
+    const limit = parseInt(searchParams.get("limit") || "10");
     const search = searchParams.get("search") || "";
 
-    const skip = (page - 1) * pageSize;
-    const take = pageSize;
+    const skip = (page - 1) * limit;
 
     const where = search
       ? {
@@ -33,21 +33,12 @@ export async function GET(request: Request) {
       prisma.user.findMany({
         where,
         skip,
-        take,
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          username: true,
-          name: true,
-          email: true,
-          createdAt: true,
-          updatedAt: true,
-          role: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
+        take: limit,
+        include: {
+          role: true,
+        },
+        orderBy: {
+          createdAt: "desc",
         },
       }),
       prisma.user.count({ where }),
@@ -70,34 +61,23 @@ export async function GET(request: Request) {
 // 创建用户
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     if (!session) {
       return NextResponse.json({ error: "未授权" }, { status: 401 });
     }
 
     const data = await request.json();
-    const { username, name, email, password, roleId } = data;
-
-    // 检查用户名是否已存在
-    const existingUser = await prisma.user.findUnique({
-      where: { username },
-    });
-
-    if (existingUser) {
-      return NextResponse.json(
-        { error: "用户名已存在" },
-        { status: 400 }
-      );
-    }
-
-    // 创建用户
     const user = await prisma.user.create({
       data: {
-        username,
-        name,
-        email,
-        password, // 注意：实际应用中应该对密码进行加密
-        roleId,
+        ...data,
+        role: {
+          connect: {
+            id: data.roleId,
+          },
+        },
+      },
+      include: {
+        role: true,
       },
     });
 

@@ -19,6 +19,7 @@ export const {
   pages: {
     signIn: '/login',
   },
+  secret: process.env.NEXTAUTH_SECRET || 'your-secret-key',
   providers: [
     CredentialsProvider({
       name: 'Credentials',

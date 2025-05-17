@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -23,6 +23,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Label } from "@/components/ui/label";
+import { useToast } from "@/components/ui/use-toast";
 
 // 用户表单验证模式
 const userFormSchema = z.object({
@@ -35,7 +36,7 @@ const userFormSchema = z.object({
 
 type UserFormValues = z.infer<typeof userFormSchema>;
 
-// 模拟获取用户列表
+// 获取用户列表
 async function fetchUsers() {
   const response = await fetch("/api/users");
   if (!response.ok) {
@@ -54,6 +55,8 @@ export default function UsersPage() {
   const [search, setSearch] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserFormValues | null>(null);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   // 获取用户列表
   const { data, isLoading, error } = useQuery({
@@ -89,11 +92,20 @@ export default function UsersPage() {
         throw new Error("保存用户失败");
       }
 
+      toast({
+        title: "成功",
+        description: values.id ? "用户更新成功" : "用户创建成功",
+      });
+
       setIsDialogOpen(false);
       form.reset();
-      // TODO: 刷新用户列表
+      queryClient.invalidateQueries({ queryKey: ["users"] });
     } catch (error) {
-      console.error("保存用户失败:", error);
+      toast({
+        title: "错误",
+        description: "保存用户失败",
+        variant: "destructive",
+      });
     }
   };
 
@@ -119,9 +131,18 @@ export default function UsersPage() {
         throw new Error("删除用户失败");
       }
 
-      // TODO: 刷新用户列表
+      toast({
+        title: "成功",
+        description: "用户删除成功",
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["users"] });
     } catch (error) {
-      console.error("删除用户失败:", error);
+      toast({
+        title: "错误",
+        description: "删除用户失败",
+        variant: "destructive",
+      });
     }
   };
 
