@@ -1,53 +1,61 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { PrismaClient } from "@prisma/client";
+import { auth } from "@/auth";
+
+const prisma = new PrismaClient();
 
 // 获取权限列表
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     if (!session) {
-      return NextResponse.json({ error: "未授权" }, { status: 401 });
+      return NextResponse.json(
+        { code: 401, message: "未授权", data: null },
+        { status: 401 }
+      );
     }
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get("page") || "1");
-    const pageSize = parseInt(searchParams.get("pageSize") || "10");
+    const limit = parseInt(searchParams.get("limit") || "10");
     const search = searchParams.get("search") || "";
-
-    const skip = (page - 1) * pageSize;
-    const take = pageSize;
 
     const where = search
       ? {
           OR: [
             { name: { contains: search } },
-            { code: { contains: search } },
             { description: { contains: search } },
           ],
         }
       : {};
 
-    const [permissions, total] = await Promise.all([
+    const [total, permissions] = await Promise.all([
+      prisma.permission.count({ where }),
       prisma.permission.findMany({
         where,
-        skip,
-        take,
+        include: {
+          roles: true,
+        },
+        skip: (page - 1) * limit,
+        take: limit,
         orderBy: { createdAt: "desc" },
       }),
-      prisma.permission.count({ where }),
     ]);
 
     return NextResponse.json({
-      permissions,
-      total,
-      hasMore: skip + permissions.length < total,
+      code: 200,
+      message: "success",
+      data: {
+        items: permissions,
+        total,
+        page,
+        limit,
+      },
     });
   } catch (error) {
     console.error("获取权限列表失败:", error);
     return NextResponse.json(
-      { error: "获取权限列表失败" },
+      { code: 500, message: "获取权限列表失败", data: null },
       { status: 500 }
     );
   }
@@ -56,40 +64,48 @@ export async function GET(request: Request) {
 // 创建权限
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     if (!session) {
-      return NextResponse.json({ error: "未授权" }, { status: 401 });
+      return NextResponse.json(
+        { code: 401, message: "未授权", data: null },
+        { status: 401 }
+      );
     }
 
     const data = await request.json();
-    const { name, code, description } = data;
+    const { name, description } = data;
 
-    // 检查权限代码是否已存在
-    const existingPermission = await prisma.permission.findFirst({
-      where: { code },
+    // 检查权限名是否已存在
+    const existingPermission = await prisma.permission.findUnique({
+      where: { name },
     });
 
     if (existingPermission) {
       return NextResponse.json(
-        { error: "权限代码已存在" },
+        { code: 400, message: "权限名已存在", data: null },
         { status: 400 }
       );
     }
 
-    // 创建权限
     const permission = await prisma.permission.create({
       data: {
         name,
-        code,
         description,
+      },
+      include: {
+        roles: true,
       },
     });
 
-    return NextResponse.json(permission);
+    return NextResponse.json({
+      code: 200,
+      message: "success",
+      data: permission,
+    });
   } catch (error) {
     console.error("创建权限失败:", error);
     return NextResponse.json(
-      { error: "创建权限失败" },
+      { code: 500, message: "创建权限失败", data: null },
       { status: 500 }
     );
   }
@@ -98,19 +114,54 @@ export async function POST(request: Request) {
 // 更新权限
 export async function PUT(request: Request) {
   try {
-    const body = await request.json();
-    const { id } = body;
-    
-    // TODO: 验证权限数据
-    // TODO: 更新数据库
-    
+    const session = await auth();
+    if (!session) {
+      return NextResponse.json(
+        { code: 401, message: "未授权", data: null },
+        { status: 401 }
+      );
+    }
+
+    const data = await request.json();
+    const { id, name, description } = data;
+
+    // 检查权限名是否已存在（排除当前权限）
+    if (name) {
+      const existingPermission = await prisma.permission.findFirst({
+        where: {
+          name,
+          id: { not: id },
+        },
+      });
+
+      if (existingPermission) {
+        return NextResponse.json(
+          { code: 400, message: "权限名已存在", data: null },
+          { status: 400 }
+        );
+      }
+    }
+
+    const permission = await prisma.permission.update({
+      where: { id },
+      data: {
+        name,
+        description,
+      },
+      include: {
+        roles: true,
+      },
+    });
+
     return NextResponse.json({
-      message: "权限更新成功",
-      data: body,
+      code: 200,
+      message: "success",
+      data: permission,
     });
   } catch (error) {
+    console.error("更新权限失败:", error);
     return NextResponse.json(
-      { error: "更新权限失败" },
+      { code: 500, message: "更新权限失败", data: null },
       { status: 500 }
     );
   }
@@ -119,17 +170,55 @@ export async function PUT(request: Request) {
 // 删除权限
 export async function DELETE(request: Request) {
   try {
+    const session = await auth();
+    if (!session) {
+      return NextResponse.json(
+        { code: 401, message: "未授权", data: null },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
-    
-    // TODO: 从数据库删除权限
-    
+    const id = parseInt(searchParams.get("id") || "0");
+
+    if (!id) {
+      return NextResponse.json(
+        { code: 400, message: "权限ID不能为空", data: null },
+        { status: 400 }
+      );
+    }
+
+    // 检查是否有角色使用该权限
+    const rolesWithPermission = await prisma.role.findFirst({
+      where: {
+        permissions: {
+          some: {
+            id,
+          },
+        },
+      },
+    });
+
+    if (rolesWithPermission) {
+      return NextResponse.json(
+        { code: 400, message: "该权限已被角色使用，无法删除", data: null },
+        { status: 400 }
+      );
+    }
+
+    await prisma.permission.delete({
+      where: { id },
+    });
+
     return NextResponse.json({
-      message: "权限删除成功",
+      code: 200,
+      message: "success",
+      data: null,
     });
   } catch (error) {
+    console.error("删除权限失败:", error);
     return NextResponse.json(
-      { error: "删除权限失败" },
+      { code: 500, message: "删除权限失败", data: null },
       { status: 500 }
     );
   }
