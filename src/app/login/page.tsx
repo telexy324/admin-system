@@ -2,122 +2,102 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { signIn } from "next-auth/react";
 import { useToast } from "@/components/ui/use-toast";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-const loginSchema = z.object({
-  email: z.string().email("请输入有效的邮箱地址"),
-  password: z.string().min(6, "密码至少需要6个字符"),
-});
-
-type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<LoginFormData>({
-    resolver: zodResolver(loginSchema),
-  });
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
 
-  const onSubmit = async (data: LoginFormData) => {
+    const formData = new FormData(e.currentTarget);
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
+
     try {
-      setIsLoading(true);
-      console.log('开始登录请求...');
-      
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
+      const result = await signIn('credentials', {
+        email,
+        password,
+        redirect: false,
       });
 
-      const result = await response.json();
-      console.log('登录响应:', result);
-
-      if (!response.ok) {
-        throw new Error(result.error || "登录失败");
+      if (result?.error) {
+        toast({
+          title: '登录失败',
+          description: result.error,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: '登录成功',
+          description: '正在跳转到仪表盘...',
+        });
+        router.replace('/dashboard');
       }
-
-      // 登录成功
-      toast({
-        title: "登录成功",
-        description: "正在跳转到首页...",
-      });
-
-      // 存储用户信息和 token
-      localStorage.setItem("user", JSON.stringify(result.user));
-      localStorage.setItem("token", result.token);
-
-      console.log('准备跳转到仪表盘...');
-      // 使用 replace 而不是 push
-      router.replace("/dashboard");
     } catch (error) {
-      console.error('登录错误:', error);
       toast({
-        title: "登录失败",
-        description: error instanceof Error ? error.message : "请稍后重试",
-        variant: "destructive",
+        title: '登录失败',
+        description: '发生未知错误，请稍后重试',
+        variant: 'destructive',
       });
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="text-2xl text-center">登录系统</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">邮箱</Label>
-              <Input
+      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow">
+        <div>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+            登录系统
+          </h2>
+        </div>
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          <div className="rounded-md shadow-sm -space-y-px">
+            <div>
+              <label htmlFor="email" className="sr-only">
+                邮箱
+              </label>
+              <input
                 id="email"
+                name="email"
                 type="email"
-                {...register("email")}
-                placeholder="请输入邮箱"
+                required
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                placeholder="邮箱"
               />
-              {errors.email && (
-                <p className="text-sm text-red-500">{errors.email.message}</p>
-              )}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">密码</Label>
-              <Input
+            <div>
+              <label htmlFor="password" className="sr-only">
+                密码
+              </label>
+              <input
                 id="password"
+                name="password"
                 type="password"
-                {...register("password")}
-                placeholder="请输入密码"
+                required
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                placeholder="密码"
               />
-              {errors.password && (
-                <p className="text-sm text-red-500">{errors.password.message}</p>
-              )}
             </div>
-            <Button
+          </div>
+
+          <div>
+            <button
               type="submit"
-              className="w-full"
-              disabled={isLoading}
+              disabled={loading}
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
             >
-              {isLoading ? "登录中..." : "登录"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+              {loading ? '登录中...' : '登录'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 } 
