@@ -1,94 +1,93 @@
 import { NextResponse } from "next/server";
-
-// 模拟权限数据
-const permissions = [
-  {
-    id: 1,
-    name: "查看用户",
-    code: "user:view",
-    description: "允许查看用户列表和详情",
-    createdAt: "2024-01-01",
-  },
-  {
-    id: 2,
-    name: "管理用户",
-    code: "user:manage",
-    description: "允许创建、编辑和删除用户",
-    createdAt: "2024-01-01",
-  },
-  {
-    id: 3,
-    name: "查看角色",
-    code: "role:view",
-    description: "允许查看角色列表和详情",
-    createdAt: "2024-01-01",
-  },
-  {
-    id: 4,
-    name: "管理角色",
-    code: "role:manage",
-    description: "允许创建、编辑和删除角色",
-    createdAt: "2024-01-01",
-  },
-  {
-    id: 5,
-    name: "查看菜单",
-    code: "menu:view",
-    description: "允许查看菜单列表和详情",
-    createdAt: "2024-01-01",
-  },
-  {
-    id: 6,
-    name: "管理菜单",
-    code: "menu:manage",
-    description: "允许创建、编辑和删除菜单",
-    createdAt: "2024-01-01",
-  },
-];
+import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 // 获取权限列表
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const page = parseInt(searchParams.get("page") || "1");
-  const pageSize = parseInt(searchParams.get("pageSize") || "10");
-  const search = searchParams.get("search") || "";
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "未授权" }, { status: 401 });
+    }
 
-  // 模拟搜索和分页
-  const filteredPermissions = permissions.filter(permission => 
-    permission.name.includes(search) || 
-    permission.code.includes(search) ||
-    permission.description.includes(search)
-  );
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get("page") || "1");
+    const pageSize = parseInt(searchParams.get("pageSize") || "10");
+    const search = searchParams.get("search") || "";
 
-  const start = (page - 1) * pageSize;
-  const end = start + pageSize;
-  const paginatedPermissions = filteredPermissions.slice(start, end);
+    const skip = (page - 1) * pageSize;
+    const take = pageSize;
 
-  return NextResponse.json({
-    data: paginatedPermissions,
-    total: filteredPermissions.length,
-    page,
-    pageSize,
-  });
+    const where = search
+      ? {
+          OR: [
+            { name: { contains: search } },
+            { code: { contains: search } },
+            { description: { contains: search } },
+          ],
+        }
+      : {};
+
+    const [permissions, total] = await Promise.all([
+      prisma.permission.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.permission.count({ where }),
+    ]);
+
+    return NextResponse.json({
+      permissions,
+      total,
+      hasMore: skip + permissions.length < total,
+    });
+  } catch (error) {
+    console.error("获取权限列表失败:", error);
+    return NextResponse.json(
+      { error: "获取权限列表失败" },
+      { status: 500 }
+    );
+  }
 }
 
 // 创建权限
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    
-    // TODO: 验证权限数据
-    // TODO: 保存到数据库
-    
-    return NextResponse.json({
-      message: "权限创建成功",
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "未授权" }, { status: 401 });
+    }
+
+    const data = await request.json();
+    const { name, code, description } = data;
+
+    // 检查权限代码是否已存在
+    const existingPermission = await prisma.permission.findFirst({
+      where: { code },
+    });
+
+    if (existingPermission) {
+      return NextResponse.json(
+        { error: "权限代码已存在" },
+        { status: 400 }
+      );
+    }
+
+    // 创建权限
+    const permission = await prisma.permission.create({
       data: {
-        id: permissions.length + 1,
-        ...body,
-        createdAt: new Date().toISOString().split("T")[0],
+        name,
+        code,
+        description,
       },
     });
+
+    return NextResponse.json(permission);
   } catch (error) {
+    console.error("创建权限失败:", error);
     return NextResponse.json(
       { error: "创建权限失败" },
       { status: 500 }

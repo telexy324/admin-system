@@ -40,7 +40,12 @@ async function fetchRoles() {
   if (!response.ok) {
     throw new Error("获取角色列表失败");
   }
-  return response.json();
+  const data = await response.json();
+  return {
+    roles: data.roles || [],
+    total: data.total || 0,
+    hasMore: data.hasMore || false,
+  };
 }
 
 export default function RolesPage() {
@@ -201,7 +206,7 @@ export default function RolesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data?.roles.map((role: any) => (
+            {data?.roles?.map((role: any) => (
               <TableRow key={role.id}>
                 <TableCell>{role.name}</TableCell>
                 <TableCell>{role.description}</TableCell>
@@ -233,7 +238,7 @@ export default function RolesPage() {
 
       <div className="flex items-center justify-between">
         <div className="text-sm text-gray-500">
-          共 {data?.total} 条记录
+          共 {data?.total || 0} 条记录
         </div>
         <div className="flex items-center gap-2">
           <Button

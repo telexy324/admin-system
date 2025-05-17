@@ -43,7 +43,12 @@ async function fetchMenus() {
   if (!response.ok) {
     throw new Error("获取菜单列表失败");
   }
-  return response.json();
+  const data = await response.json();
+  return {
+    menus: data.menus || [],
+    total: data.total || 0,
+    hasMore: data.hasMore || false,
+  };
 }
 
 export default function MenusPage() {
@@ -236,7 +241,7 @@ export default function MenusPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data?.menus.map((menu: any) => (
+            {data?.menus?.map((menu: any) => (
               <TableRow key={menu.id}>
                 <TableCell>{menu.name}</TableCell>
                 <TableCell>{menu.path}</TableCell>
@@ -270,7 +275,7 @@ export default function MenusPage() {
 
       <div className="flex items-center justify-between">
         <div className="text-sm text-gray-500">
-          共 {data?.total} 条记录
+          共 {data?.total || 0} 条记录
         </div>
         <div className="flex items-center gap-2">
           <Button

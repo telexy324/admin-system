@@ -41,7 +41,12 @@ async function fetchUsers() {
   if (!response.ok) {
     throw new Error("获取用户列表失败");
   }
-  return response.json();
+  const data = await response.json();
+  return {
+    users: data.users || [],
+    total: data.total || 0,
+    hasMore: data.hasMore || false,
+  };
 }
 
 export default function UsersPage() {
@@ -234,7 +239,7 @@ export default function UsersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data?.users.map((user: any) => (
+            {data?.users?.map((user: any) => (
               <TableRow key={user.id}>
                 <TableCell>{user.username}</TableCell>
                 <TableCell>{user.name}</TableCell>
@@ -267,7 +272,7 @@ export default function UsersPage() {
 
       <div className="flex items-center justify-between">
         <div className="text-sm text-gray-500">
-          共 {data?.total} 条记录
+          共 {data?.total || 0} 条记录
         </div>
         <div className="flex items-center gap-2">
           <Button

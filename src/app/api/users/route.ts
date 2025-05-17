@@ -1,79 +1,109 @@
 import { NextResponse } from "next/server";
-
-// 模拟用户数据
-const users = [
-  {
-    id: 1,
-    username: "admin",
-    name: "管理员",
-    email: "admin@example.com",
-    role: "管理员",
-    status: "启用",
-    createdAt: "2024-01-01",
-  },
-  {
-    id: 2,
-    username: "user1",
-    name: "张三",
-    email: "user1@example.com",
-    role: "普通用户",
-    status: "启用",
-    createdAt: "2024-01-02",
-  },
-  {
-    id: 3,
-    username: "user2",
-    name: "李四",
-    email: "user2@example.com",
-    role: "普通用户",
-    status: "禁用",
-    createdAt: "2024-01-03",
-  },
-];
+import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 // 获取用户列表
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const page = parseInt(searchParams.get("page") || "1");
-  const pageSize = parseInt(searchParams.get("pageSize") || "10");
-  const search = searchParams.get("search") || "";
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "未授权" }, { status: 401 });
+    }
 
-  // 模拟搜索和分页
-  const filteredUsers = users.filter(user => 
-    user.username.includes(search) || 
-    user.name.includes(search) || 
-    user.email.includes(search)
-  );
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get("page") || "1");
+    const pageSize = parseInt(searchParams.get("pageSize") || "10");
+    const search = searchParams.get("search") || "";
 
-  const start = (page - 1) * pageSize;
-  const end = start + pageSize;
-  const paginatedUsers = filteredUsers.slice(start, end);
+    const skip = (page - 1) * pageSize;
+    const take = pageSize;
 
-  return NextResponse.json({
-    data: paginatedUsers,
-    total: filteredUsers.length,
-    page,
-    pageSize,
-  });
+    const where = search
+      ? {
+          OR: [
+            { username: { contains: search } },
+            { name: { contains: search } },
+            { email: { contains: search } },
+          ],
+        }
+      : {};
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          username: true,
+          name: true,
+          email: true,
+          createdAt: true,
+          updatedAt: true,
+          role: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      }),
+      prisma.user.count({ where }),
+    ]);
+
+    return NextResponse.json({
+      users,
+      total,
+      hasMore: skip + users.length < total,
+    });
+  } catch (error) {
+    console.error("获取用户列表失败:", error);
+    return NextResponse.json(
+      { error: "获取用户列表失败" },
+      { status: 500 }
+    );
+  }
 }
 
 // 创建用户
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    
-    // TODO: 验证用户数据
-    // TODO: 保存到数据库
-    
-    return NextResponse.json({
-      message: "用户创建成功",
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "未授权" }, { status: 401 });
+    }
+
+    const data = await request.json();
+    const { username, name, email, password, roleId } = data;
+
+    // 检查用户名是否已存在
+    const existingUser = await prisma.user.findUnique({
+      where: { username },
+    });
+
+    if (existingUser) {
+      return NextResponse.json(
+        { error: "用户名已存在" },
+        { status: 400 }
+      );
+    }
+
+    // 创建用户
+    const user = await prisma.user.create({
       data: {
-        id: users.length + 1,
-        ...body,
-        createdAt: new Date().toISOString().split("T")[0],
+        username,
+        name,
+        email,
+        password, // 注意：实际应用中应该对密码进行加密
+        roleId,
       },
     });
+
+    return NextResponse.json(user);
   } catch (error) {
+    console.error("创建用户失败:", error);
     return NextResponse.json(
       { error: "创建用户失败" },
       { status: 500 }

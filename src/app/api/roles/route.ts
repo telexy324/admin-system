@@ -1,68 +1,106 @@
 import { NextResponse } from "next/server";
-
-// 模拟角色数据
-const roles = [
-  {
-    id: 1,
-    name: "管理员",
-    code: "admin",
-    description: "系统管理员，拥有所有权限",
-    permissions: ["user:manage", "role:manage", "menu:manage"],
-    createdAt: "2024-01-01",
-  },
-  {
-    id: 2,
-    name: "普通用户",
-    code: "user",
-    description: "普通用户，拥有基本权限",
-    permissions: ["user:view"],
-    createdAt: "2024-01-02",
-  },
-];
+import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 // 获取角色列表
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const page = parseInt(searchParams.get("page") || "1");
-  const pageSize = parseInt(searchParams.get("pageSize") || "10");
-  const search = searchParams.get("search") || "";
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "未授权" }, { status: 401 });
+    }
 
-  // 模拟搜索和分页
-  const filteredRoles = roles.filter(role => 
-    role.name.includes(search) || 
-    role.code.includes(search) ||
-    role.description.includes(search)
-  );
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get("page") || "1");
+    const pageSize = parseInt(searchParams.get("pageSize") || "10");
+    const search = searchParams.get("search") || "";
 
-  const start = (page - 1) * pageSize;
-  const end = start + pageSize;
-  const paginatedRoles = filteredRoles.slice(start, end);
+    const skip = (page - 1) * pageSize;
+    const take = pageSize;
 
-  return NextResponse.json({
-    data: paginatedRoles,
-    total: filteredRoles.length,
-    page,
-    pageSize,
-  });
+    const where = search
+      ? {
+          OR: [
+            { name: { contains: search } },
+            { description: { contains: search } },
+          ],
+        }
+      : {};
+
+    const [roles, total] = await Promise.all([
+      prisma.role.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { createdAt: "desc" },
+        include: {
+          permissions: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+            },
+          },
+        },
+      }),
+      prisma.role.count({ where }),
+    ]);
+
+    return NextResponse.json({
+      roles,
+      total,
+      hasMore: skip + roles.length < total,
+    });
+  } catch (error) {
+    console.error("获取角色列表失败:", error);
+    return NextResponse.json(
+      { error: "获取角色列表失败" },
+      { status: 500 }
+    );
+  }
 }
 
 // 创建角色
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    
-    // TODO: 验证角色数据
-    // TODO: 保存到数据库
-    
-    return NextResponse.json({
-      message: "角色创建成功",
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "未授权" }, { status: 401 });
+    }
+
+    const data = await request.json();
+    const { name, description, permissions } = data;
+
+    // 检查角色名是否已存在
+    const existingRole = await prisma.role.findFirst({
+      where: { name },
+    });
+
+    if (existingRole) {
+      return NextResponse.json(
+        { error: "角色名已存在" },
+        { status: 400 }
+      );
+    }
+
+    // 创建角色
+    const role = await prisma.role.create({
       data: {
-        id: roles.length + 1,
-        ...body,
-        createdAt: new Date().toISOString().split("T")[0],
+        name,
+        description,
+        permissions: {
+          connect: permissions.map((id: number) => ({ id })),
+        },
+      },
+      include: {
+        permissions: true,
       },
     });
+
+    return NextResponse.json(role);
   } catch (error) {
+    console.error("创建角色失败:", error);
     return NextResponse.json(
       { error: "创建角色失败" },
       { status: 500 }

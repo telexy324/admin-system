@@ -40,7 +40,12 @@ async function fetchPermissions() {
   if (!response.ok) {
     throw new Error("获取权限列表失败");
   }
-  return response.json();
+  const data = await response.json();
+  return {
+    permissions: data.permissions || [],
+    total: data.total || 0,
+    hasMore: data.hasMore || false,
+  };
 }
 
 export default function PermissionsPage() {
@@ -215,7 +220,7 @@ export default function PermissionsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data?.permissions.map((permission: any) => (
+            {data?.permissions?.map((permission: any) => (
               <TableRow key={permission.id}>
                 <TableCell>{permission.name}</TableCell>
                 <TableCell>{permission.code}</TableCell>
@@ -248,7 +253,7 @@ export default function PermissionsPage() {
 
       <div className="flex items-center justify-between">
         <div className="text-sm text-gray-500">
-          共 {data?.total} 条记录
+          共 {data?.total || 0} 条记录
         </div>
         <div className="flex items-center gap-2">
           <Button

@@ -1,101 +1,112 @@
 import { NextResponse } from "next/server";
-
-// 模拟菜单数据
-const menus = [
-  {
-    id: 1,
-    name: "仪表盘",
-    path: "/dashboard",
-    icon: "dashboard",
-    parentId: null,
-    order: 1,
-    permissions: ["dashboard:view"],
-    createdAt: "2024-01-01",
-  },
-  {
-    id: 2,
-    name: "用户管理",
-    path: "/users",
-    icon: "users",
-    parentId: null,
-    order: 2,
-    permissions: ["user:view"],
-    createdAt: "2024-01-01",
-  },
-  {
-    id: 3,
-    name: "角色管理",
-    path: "/roles",
-    icon: "shield",
-    parentId: null,
-    order: 3,
-    permissions: ["role:view"],
-    createdAt: "2024-01-01",
-  },
-  {
-    id: 4,
-    name: "权限管理",
-    path: "/permissions",
-    icon: "key",
-    parentId: null,
-    order: 4,
-    permissions: ["permission:view"],
-    createdAt: "2024-01-01",
-  },
-  {
-    id: 5,
-    name: "菜单管理",
-    path: "/menus",
-    icon: "menu",
-    parentId: null,
-    order: 5,
-    permissions: ["menu:view"],
-    createdAt: "2024-01-01",
-  },
-];
+import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 // 获取菜单列表
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const page = parseInt(searchParams.get("page") || "1");
-  const pageSize = parseInt(searchParams.get("pageSize") || "10");
-  const search = searchParams.get("search") || "";
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "未授权" }, { status: 401 });
+    }
 
-  // 模拟搜索和分页
-  const filteredMenus = menus.filter(menu => 
-    menu.name.includes(search) || 
-    menu.path.includes(search)
-  );
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get("page") || "1");
+    const pageSize = parseInt(searchParams.get("pageSize") || "10");
+    const search = searchParams.get("search") || "";
 
-  const start = (page - 1) * pageSize;
-  const end = start + pageSize;
-  const paginatedMenus = filteredMenus.slice(start, end);
+    const skip = (page - 1) * pageSize;
+    const take = pageSize;
 
-  return NextResponse.json({
-    data: paginatedMenus,
-    total: filteredMenus.length,
-    page,
-    pageSize,
-  });
+    const where = search
+      ? {
+          OR: [
+            { name: { contains: search } },
+            { path: { contains: search } },
+          ],
+        }
+      : {};
+
+    const [menus, total] = await Promise.all([
+      prisma.menu.findMany({
+        where,
+        skip,
+        take,
+        orderBy: [
+          { parentId: "asc" },
+          { order: "asc" },
+        ],
+        include: {
+          permissions: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+            },
+          },
+        },
+      }),
+      prisma.menu.count({ where }),
+    ]);
+
+    return NextResponse.json({
+      menus,
+      total,
+      hasMore: skip + menus.length < total,
+    });
+  } catch (error) {
+    console.error("获取菜单列表失败:", error);
+    return NextResponse.json(
+      { error: "获取菜单列表失败" },
+      { status: 500 }
+    );
+  }
 }
 
 // 创建菜单
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    
-    // TODO: 验证菜单数据
-    // TODO: 保存到数据库
-    
-    return NextResponse.json({
-      message: "菜单创建成功",
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "未授权" }, { status: 401 });
+    }
+
+    const data = await request.json();
+    const { name, path, icon, parentId, order, permissions } = data;
+
+    // 检查菜单路径是否已存在
+    const existingMenu = await prisma.menu.findFirst({
+      where: { path },
+    });
+
+    if (existingMenu) {
+      return NextResponse.json(
+        { error: "菜单路径已存在" },
+        { status: 400 }
+      );
+    }
+
+    // 创建菜单
+    const menu = await prisma.menu.create({
       data: {
-        id: menus.length + 1,
-        ...body,
-        createdAt: new Date().toISOString().split("T")[0],
+        name,
+        path,
+        icon,
+        parentId,
+        order,
+        permissions: {
+          connect: permissions.map((id: number) => ({ id })),
+        },
+      },
+      include: {
+        permissions: true,
       },
     });
+
+    return NextResponse.json(menu);
   } catch (error) {
+    console.error("创建菜单失败:", error);
     return NextResponse.json(
       { error: "创建菜单失败" },
       { status: 500 }
