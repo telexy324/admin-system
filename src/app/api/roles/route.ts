@@ -1,23 +1,23 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { PrismaClient } from "@prisma/client";
+import { auth } from "../auth/[...nextauth]/route";
+
+const prisma = new PrismaClient();
 
 // 获取角色列表
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     if (!session) {
       return NextResponse.json({ error: "未授权" }, { status: 401 });
     }
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get("page") || "1");
-    const pageSize = parseInt(searchParams.get("pageSize") || "10");
+    const limit = parseInt(searchParams.get("limit") || "10");
     const search = searchParams.get("search") || "";
 
-    const skip = (page - 1) * pageSize;
-    const take = pageSize;
+    const skip = (page - 1) * limit;
 
     const where = search
       ? {
@@ -32,16 +32,13 @@ export async function GET(request: Request) {
       prisma.role.findMany({
         where,
         skip,
-        take,
-        orderBy: { createdAt: "desc" },
+        take: limit,
         include: {
-          permissions: {
-            select: {
-              id: true,
-              name: true,
-              code: true,
-            },
-          },
+          permissions: true,
+          menus: true,
+        },
+        orderBy: {
+          createdAt: "desc",
         },
       }),
       prisma.role.count({ where }),
@@ -64,37 +61,26 @@ export async function GET(request: Request) {
 // 创建角色
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     if (!session) {
       return NextResponse.json({ error: "未授权" }, { status: 401 });
     }
 
     const data = await request.json();
-    const { name, description, permissions } = data;
-
-    // 检查角色名是否已存在
-    const existingRole = await prisma.role.findFirst({
-      where: { name },
-    });
-
-    if (existingRole) {
-      return NextResponse.json(
-        { error: "角色名已存在" },
-        { status: 400 }
-      );
-    }
-
-    // 创建角色
     const role = await prisma.role.create({
       data: {
-        name,
-        description,
+        name: data.name,
+        description: data.description,
         permissions: {
-          connect: permissions.map((id: number) => ({ id })),
+          connect: data.permissionIds?.map((id: number) => ({ id })) || [],
+        },
+        menus: {
+          connect: data.menuIds?.map((id: number) => ({ id })) || [],
         },
       },
       include: {
         permissions: true,
+        menus: true,
       },
     });
 
@@ -111,17 +97,33 @@ export async function POST(request: Request) {
 // 更新角色
 export async function PUT(request: Request) {
   try {
-    const body = await request.json();
-    const { id } = body;
-    
-    // TODO: 验证角色数据
-    // TODO: 更新数据库
-    
-    return NextResponse.json({
-      message: "角色更新成功",
-      data: body,
+    const session = await auth();
+    if (!session) {
+      return NextResponse.json({ error: "未授权" }, { status: 401 });
+    }
+
+    const data = await request.json();
+    const role = await prisma.role.update({
+      where: { id: data.id },
+      data: {
+        name: data.name,
+        description: data.description,
+        permissions: {
+          set: data.permissionIds?.map((id: number) => ({ id })) || [],
+        },
+        menus: {
+          set: data.menuIds?.map((id: number) => ({ id })) || [],
+        },
+      },
+      include: {
+        permissions: true,
+        menus: true,
+      },
     });
+
+    return NextResponse.json(role);
   } catch (error) {
+    console.error("更新角色失败:", error);
     return NextResponse.json(
       { error: "更新角色失败" },
       { status: 500 }
@@ -132,15 +134,21 @@ export async function PUT(request: Request) {
 // 删除角色
 export async function DELETE(request: Request) {
   try {
+    const session = await auth();
+    if (!session) {
+      return NextResponse.json({ error: "未授权" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
-    
-    // TODO: 从数据库删除角色
-    
-    return NextResponse.json({
-      message: "角色删除成功",
+    const id = parseInt(searchParams.get("id") || "0");
+
+    await prisma.role.delete({
+      where: { id },
     });
+
+    return NextResponse.json({ message: "角色删除成功" });
   } catch (error) {
+    console.error("删除角色失败:", error);
     return NextResponse.json(
       { error: "删除角色失败" },
       { status: 500 }

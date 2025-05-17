@@ -1,23 +1,23 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { PrismaClient } from "@prisma/client";
+import { auth } from "../auth/[...nextauth]/route";
+
+const prisma = new PrismaClient();
 
 // 获取菜单列表
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     if (!session) {
       return NextResponse.json({ error: "未授权" }, { status: 401 });
     }
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get("page") || "1");
-    const pageSize = parseInt(searchParams.get("pageSize") || "10");
+    const limit = parseInt(searchParams.get("limit") || "10");
     const search = searchParams.get("search") || "";
 
-    const skip = (page - 1) * pageSize;
-    const take = pageSize;
+    const skip = (page - 1) * limit;
 
     const where = search
       ? {
@@ -32,19 +32,13 @@ export async function GET(request: Request) {
       prisma.menu.findMany({
         where,
         skip,
-        take,
-        orderBy: [
-          { parentId: "asc" },
-          { order: "asc" },
-        ],
+        take: limit,
         include: {
-          permissions: {
-            select: {
-              id: true,
-              name: true,
-              code: true,
-            },
-          },
+          parent: true,
+          children: true,
+        },
+        orderBy: {
+          createdAt: "desc",
         },
       }),
       prisma.menu.count({ where }),
@@ -67,40 +61,29 @@ export async function GET(request: Request) {
 // 创建菜单
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
+    const session = await auth();
     if (!session) {
       return NextResponse.json({ error: "未授权" }, { status: 401 });
     }
 
     const data = await request.json();
-    const { name, path, icon, parentId, order, permissions } = data;
-
-    // 检查菜单路径是否已存在
-    const existingMenu = await prisma.menu.findFirst({
-      where: { path },
-    });
-
-    if (existingMenu) {
-      return NextResponse.json(
-        { error: "菜单路径已存在" },
-        { status: 400 }
-      );
-    }
-
-    // 创建菜单
     const menu = await prisma.menu.create({
       data: {
-        name,
-        path,
-        icon,
-        parentId,
-        order,
-        permissions: {
-          connect: permissions.map((id: number) => ({ id })),
-        },
+        name: data.name,
+        path: data.path,
+        icon: data.icon,
+        sort: data.sort || 0,
+        parent: data.parentId
+          ? {
+              connect: {
+                id: data.parentId,
+              },
+            }
+          : undefined,
       },
       include: {
-        permissions: true,
+        parent: true,
+        children: true,
       },
     });
 
@@ -117,17 +100,38 @@ export async function POST(request: Request) {
 // 更新菜单
 export async function PUT(request: Request) {
   try {
-    const body = await request.json();
-    const { id } = body;
-    
-    // TODO: 验证菜单数据
-    // TODO: 更新数据库
-    
-    return NextResponse.json({
-      message: "菜单更新成功",
-      data: body,
+    const session = await auth();
+    if (!session) {
+      return NextResponse.json({ error: "未授权" }, { status: 401 });
+    }
+
+    const data = await request.json();
+    const menu = await prisma.menu.update({
+      where: { id: data.id },
+      data: {
+        name: data.name,
+        path: data.path,
+        icon: data.icon,
+        sort: data.sort || 0,
+        parent: data.parentId
+          ? {
+              connect: {
+                id: data.parentId,
+              },
+            }
+          : {
+              disconnect: true,
+            },
+      },
+      include: {
+        parent: true,
+        children: true,
+      },
     });
+
+    return NextResponse.json(menu);
   } catch (error) {
+    console.error("更新菜单失败:", error);
     return NextResponse.json(
       { error: "更新菜单失败" },
       { status: 500 }
@@ -138,15 +142,33 @@ export async function PUT(request: Request) {
 // 删除菜单
 export async function DELETE(request: Request) {
   try {
+    const session = await auth();
+    if (!session) {
+      return NextResponse.json({ error: "未授权" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
-    
-    // TODO: 从数据库删除菜单
-    
-    return NextResponse.json({
-      message: "菜单删除成功",
+    const id = parseInt(searchParams.get("id") || "0");
+
+    // 检查是否有子菜单
+    const children = await prisma.menu.findMany({
+      where: { parentId: id },
     });
+
+    if (children.length > 0) {
+      return NextResponse.json(
+        { error: "请先删除子菜单" },
+        { status: 400 }
+      );
+    }
+
+    await prisma.menu.delete({
+      where: { id },
+    });
+
+    return NextResponse.json({ message: "菜单删除成功" });
   } catch (error) {
+    console.error("删除菜单失败:", error);
     return NextResponse.json(
       { error: "删除菜单失败" },
       { status: 500 }
