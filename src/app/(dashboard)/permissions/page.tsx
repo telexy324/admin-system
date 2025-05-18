@@ -24,12 +24,23 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // 权限表单验证模式
 const permissionFormSchema = z.object({
   id: z.number().optional(),
   name: z.string().min(2, "权限名称至少2个字符"),
   description: z.string().min(2, "权限描述至少2个字符"),
+  path: z.string().min(1, "API路径不能为空"),
+  method: z.enum(["GET", "POST", "PUT", "DELETE", "PATCH"], {
+    required_error: "请选择HTTP方法",
+  }),
 });
 
 type PermissionFormValues = z.infer<typeof permissionFormSchema>;
@@ -68,6 +79,8 @@ export default function PermissionsPage() {
     defaultValues: {
       name: "",
       description: "",
+      path: "",
+      method: "GET",
     },
   });
 
@@ -192,6 +205,42 @@ export default function PermissionsPage() {
                   </p>
                 )}
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="path">API路径</Label>
+                <Input
+                  id="path"
+                  {...form.register("path")}
+                  placeholder="请输入API路径，例如：/api/users"
+                />
+                {form.formState.errors.path && (
+                  <p className="text-sm text-red-500">
+                    {form.formState.errors.path.message}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="method">HTTP方法</Label>
+                <Select
+                  onValueChange={(value) => form.setValue("method", value as any)}
+                  defaultValue={form.getValues("method")}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="选择HTTP方法" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="GET">GET</SelectItem>
+                    <SelectItem value="POST">POST</SelectItem>
+                    <SelectItem value="PUT">PUT</SelectItem>
+                    <SelectItem value="DELETE">DELETE</SelectItem>
+                    <SelectItem value="PATCH">PATCH</SelectItem>
+                  </SelectContent>
+                </Select>
+                {form.formState.errors.method && (
+                  <p className="text-sm text-red-500">
+                    {form.formState.errors.method.message}
+                  </p>
+                )}
+              </div>
               <div className="flex justify-end gap-2">
                 <Button
                   type="button"
@@ -226,6 +275,8 @@ export default function PermissionsPage() {
             <TableRow>
               <TableHead>权限名称</TableHead>
               <TableHead>描述</TableHead>
+              <TableHead>API路径</TableHead>
+              <TableHead>HTTP方法</TableHead>
               <TableHead className="text-right">操作</TableHead>
             </TableRow>
           </TableHeader>
@@ -234,6 +285,8 @@ export default function PermissionsPage() {
               <TableRow key={permission.id}>
                 <TableCell>{permission.name}</TableCell>
                 <TableCell>{permission.description}</TableCell>
+                <TableCell>{permission.path}</TableCell>
+                <TableCell>{permission.method}</TableCell>
                 <TableCell className="text-right">
                   <Button
                     variant="ghost"
