@@ -3,6 +3,7 @@ import { PrismaAdapter } from '@auth/prisma-adapter';
 import { PrismaClient } from '@prisma/client';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { compare } from 'bcryptjs';
+import type { User } from 'next-auth';
 
 const prisma = new PrismaClient();
 
@@ -27,7 +28,7 @@ export const {
         email: { label: '邮箱', type: 'email' },
         password: { label: '密码', type: 'password' },
       },
-      async authorize(credentials) {
+      async authorize(credentials: Record<"email" | "password", string> | undefined) {
         if (!credentials?.email || !credentials?.password) {
           throw new Error('邮箱和密码不能为空');
         }
@@ -35,7 +36,7 @@ export const {
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
           include: {
-            role: {
+            roles: {
               include: {
                 permissions: true,
                 menus: true,
@@ -54,24 +55,39 @@ export const {
         }
 
         return {
-          id: user.id,
+          id: user.id.toString(),
+          username: user.username,
           email: user.email,
           name: user.name,
-          role: user.role,
-        };
+          avatar: user.avatar,
+          status: user.status,
+          roles: user.roles,
+        } as User;
       },
     }),
   ],
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role = user.role;
+        token.id = user.id;
+        token.username = user.username;
+        token.email = user.email;
+        token.name = user.name;
+        token.avatar = user.avatar;
+        token.status = user.status;
+        token.roles = user.roles;
       }
       return token;
     },
     async session({ session, token }) {
       if (token) {
-        session.user.role = token.role;
+        session.user.id = token.id;
+        session.user.username = token.username;
+        session.user.email = token.email;
+        session.user.name = token.name;
+        session.user.avatar = token.avatar;
+        session.user.status = token.status;
+        session.user.roles = token.roles;
       }
       return session;
     },
