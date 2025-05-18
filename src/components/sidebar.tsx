@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
@@ -10,7 +9,11 @@ import {
   Shield,
   Menu as MenuIcon,
   Settings,
+  LogOut,
 } from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/use-toast";
+import { signOut } from "next-auth/react";
 
 const menuItems = [
   {
@@ -42,44 +45,81 @@ const menuItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const { toast } = useToast();
+
+  const handleLogout = async () => {
+    try {
+      await signOut({ 
+        redirect: false,
+        callbackUrl: "/login"
+      });
+      
+      toast({
+        title: "登出成功",
+        description: "您已成功退出系统",
+      });
+      
+      // 跳转到登录页
+      router.push("/login");
+    } catch (error) {
+      console.error("登出失败:", error);
+      toast({
+        title: "登出失败",
+        description: "请稍后重试",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
-    <aside
+    <div
       className={cn(
-        'bg-white border-r transition-all duration-300',
-        isCollapsed ? 'w-16' : 'w-64'
+        "flex h-screen flex-col border-r bg-background transition-all duration-300",
+        isCollapsed ? "w-16" : "w-64"
       )}
     >
-      <div className="h-16 flex items-center justify-between px-4 border-b">
-        {!isCollapsed && <h1 className="text-xl font-bold">管理系统</h1>}
-        <button
+      <div className="flex h-14 items-center border-b px-4">
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-2 hover:bg-gray-100 rounded-lg"
         >
           <MenuIcon className="h-5 w-5" />
-        </button>
+        </Button>
+        {!isCollapsed && <span className="ml-2 text-lg font-semibold">管理系统</span>}
       </div>
-      <nav className="p-4 space-y-2">
-        {menuItems.map((item) => {
-          const isActive = pathname === item.href;
-          return (
-            <Link
+      <div className="flex-1 overflow-auto py-2">
+        <nav className="grid gap-1 px-2">
+          {menuItems.map((item) => (
+            <Button
               key={item.href}
-              href={item.href}
+              variant={pathname === item.href ? "secondary" : "ghost"}
               className={cn(
-                'flex items-center gap-3 px-3 py-2 rounded-lg transition-colors',
-                isActive
-                  ? 'bg-primary text-primary-foreground'
-                  : 'hover:bg-gray-100'
+                "justify-start",
+                isCollapsed ? "px-2" : "px-4"
               )}
+              onClick={() => router.push(item.href)}
             >
-              <item.icon className="h-5 w-5" />
-              {!isCollapsed && <span>{item.title}</span>}
-            </Link>
-          );
-        })}
-      </nav>
-    </aside>
+              <span className="flex items-center">
+                <item.icon className="h-5 w-5" />
+                {!isCollapsed && <span className="ml-2">{item.title}</span>}
+              </span>
+            </Button>
+          ))}
+        </nav>
+      </div>
+      <div className="border-t p-4">
+        <Button
+          variant="ghost"
+          className="w-full justify-start"
+          onClick={handleLogout}
+        >
+          <LogOut className="h-5 w-5" />
+          {!isCollapsed && <span className="ml-2">退出登录</span>}
+        </Button>
+      </div>
+    </div>
   );
 } 
