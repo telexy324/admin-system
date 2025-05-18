@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
-import { SignJWT } from "jose";
 import { compare } from 'bcryptjs';
 import { sign } from 'jsonwebtoken';
 
@@ -33,7 +31,7 @@ export async function POST(request: Request) {
     const user = await prisma.user.findUnique({
       where: { email },
       include: {
-        role: {
+        roles: {
           include: {
             permissions: true,
             menus: true
@@ -63,7 +61,7 @@ export async function POST(request: Request) {
       {
         id: user.id,
         email: user.email,
-        role: user.role
+        roles: user.roles
       },
       process.env.JWT_SECRET || 'your-secret-key',
       { expiresIn: '1d' }
@@ -73,9 +71,12 @@ export async function POST(request: Request) {
     const response = NextResponse.json({
       user: {
         id: user.id,
+        username: user.username,
         email: user.email,
         name: user.name,
-        role: user.role
+        avatar: user.avatar,
+        status: user.status,
+        roles: user.roles
       },
       token
     });
