@@ -29,6 +29,8 @@ model User {
 
   // 关联
   logs      Log[]
+  leaves    Leave[]  @relation("CreatedByUser") // 添加假期关联
+  approvedLeaves    Leave[]  @relation("ApprovedByUser") // 添加假期关联
 
   @@map("users")
 }
@@ -88,4 +90,44 @@ model Log {
   user      User     @relation(fields: [userId], references: [id])
 
   @@map("logs")
+}
+
+// 假期类型模型
+model LeaveType {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  days        Int      @default(0) // 每年可休天数
+  status      Int      @default(1) // 1: 启用, 2: 禁用
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 关联
+  leaves      Leave[]
+
+  @@map("leave_types")
+}
+
+// 假期申请模型
+model Leave {
+  id          Int        @id @default(autoincrement())
+  userId      Int
+  typeId      Int
+  startDate   DateTime
+  endDate     DateTime
+  days        Float      // 请假天数
+  reason      String
+  status      Int        @default(0) // 0: 待审批, 1: 已批准, 2: 已拒绝
+  approvedBy  Int?       // 审批人ID
+  approvedAt  DateTime?
+  comment     String?    // 审批意见
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // 关联
+  user        User       @relation("CreatedByUser", fields: [userId], references: [id])
+  type        LeaveType  @relation(fields: [typeId], references: [id])
+  approver    User?      @relation("ApprovedByUser", fields: [approvedBy], references: [id])
+
+  @@map("leaves")
 }
