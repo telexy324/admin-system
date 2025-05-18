@@ -32,7 +32,13 @@ export async function GET(request: Request) {
               ],
             }
           : {},
-        roleId ? { roleId: parseInt(roleId) } : {},
+        roleId
+          ? {
+              roles: {
+                some: { id: parseInt(roleId) },
+              },
+            }
+          : {},
       ],
     };
 
@@ -41,12 +47,7 @@ export async function GET(request: Request) {
       prisma.user.findMany({
         where,
         include: {
-          role: {
-            include: {
-              permissions: true,
-              menus: true,
-            },
-          },
+          roles: true,
         },
         skip: (page - 1) * limit,
         take: limit,
@@ -85,7 +86,7 @@ export async function POST(request: Request) {
     }
 
     const data = await request.json();
-    const { username, password, email, name, roleId, avatar, status } = data;
+    const { username, password, email, name, roleIds, avatar, status } = data;
 
     // 检查用户名是否已存在
     const existingUser = await prisma.user.findUnique({
@@ -117,17 +118,14 @@ export async function POST(request: Request) {
         password, // 注意：实际应用中应该对密码进行加密
         email,
         name,
-        roleId,
         avatar,
         status: status || 1,
+        roles: {
+          connect: (roleIds || []).map((id: number) => ({ id })),
+        },
       },
       include: {
-        role: {
-          include: {
-            permissions: true,
-            menus: true,
-          },
-        },
+        roles: true,
       },
     });
 
@@ -157,7 +155,7 @@ export async function PUT(request: Request) {
     }
 
     const data = await request.json();
-    const { id, username, email, name, roleId, avatar, status } = data;
+    const { id, username, email, name, roleIds, avatar, status } = data;
 
     // 检查用户名是否已存在（排除当前用户）
     if (username) {
@@ -199,17 +197,14 @@ export async function PUT(request: Request) {
         username,
         email,
         name,
-        roleId,
         avatar,
         status,
+        roles: {
+          set: (roleIds || []).map((id: number) => ({ id })),
+        },
       },
       include: {
-        role: {
-          include: {
-            permissions: true,
-            menus: true,
-          },
-        },
+        roles: true,
       },
     });
 

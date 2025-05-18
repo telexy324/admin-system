@@ -36,6 +36,7 @@ export async function GET(request: Request) {
         include: {
           permissions: true,
           menus: true,
+          users: true,
         },
         skip: (page - 1) * limit,
         take: limit,
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
     }
 
     const data = await request.json();
-    const { name, description, permissionIds, menuIds } = data;
+    const { name, description, permissionIds, menuIds, userIds } = data;
 
     // 检查角色名是否已存在
     const existingRole = await prisma.role.findUnique({
@@ -98,10 +99,14 @@ export async function POST(request: Request) {
         menus: {
           connect: menuIds?.map((id: number) => ({ id })) || [],
         },
+        users: {
+          connect: userIds?.map((id: number) => ({ id })) || [],
+        },
       },
       include: {
         permissions: true,
         menus: true,
+        users: true,
       },
     });
 
@@ -131,7 +136,7 @@ export async function PUT(request: Request) {
     }
 
     const data = await request.json();
-    const { id, name, description, permissionIds, menuIds } = data;
+    const { id, name, description, permissionIds, menuIds, userIds } = data;
 
     // 检查角色名是否已存在（排除当前角色）
     if (name) {
@@ -161,10 +166,14 @@ export async function PUT(request: Request) {
         menus: {
           set: menuIds?.map((id: number) => ({ id })) || [],
         },
+        users: {
+          set: userIds?.map((id: number) => ({ id })) || [],
+        },
       },
       include: {
         permissions: true,
         menus: true,
+        users: true,
       },
     });
 

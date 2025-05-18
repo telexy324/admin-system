@@ -24,6 +24,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
 
 // 用户表单验证模式
 const userFormSchema = z.object({
@@ -32,6 +35,7 @@ const userFormSchema = z.object({
   name: z.string().min(2, "姓名至少2个字符"),
   email: z.string().email("请输入有效的邮箱地址"),
   password: z.string().min(6, "密码至少6个字符").optional(),
+  roleIds: z.array(z.number()).optional(),
 });
 
 type UserFormValues = z.infer<typeof userFormSchema>;
@@ -50,6 +54,14 @@ async function fetchUsers() {
   };
 }
 
+// 获取所有角色
+async function fetchRoles() {
+  const response = await fetch("/api/roles?page=1&limit=1000");
+  if (!response.ok) throw new Error("获取角色失败");
+  const data = await response.json();
+  return data.data?.items || [];
+}
+
 export default function UsersPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -57,11 +69,17 @@ export default function UsersPage() {
   const [editingUser, setEditingUser] = useState<UserFormValues | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [selectedRoles, setSelectedRoles] = useState<number[]>([]);
 
   // 获取用户列表
   const { data, isLoading, error } = useQuery({
     queryKey: ["users", page, search],
     queryFn: fetchUsers,
+  });
+
+  const rolesQuery = useQuery({
+    queryKey: ["roles"],
+    queryFn: fetchRoles,
   });
 
   // 表单处理
@@ -80,12 +98,13 @@ export default function UsersPage() {
     try {
       const url = values.id ? `/api/users/${values.id}` : "/api/users";
       const method = values.id ? "PUT" : "POST";
+      const body = { ...values, roleIds: selectedRoles };
       const response = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(values),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -112,7 +131,8 @@ export default function UsersPage() {
   // 处理编辑用户
   const handleEdit = (user: any) => {
     setEditingUser(user);
-    form.reset(user);
+    form.reset({ ...user, roleIds: user.roles?.map((r: any) => r.id) || [] });
+    setSelectedRoles(user.roles?.map((r: any) => r.id) || []);
     setIsDialogOpen(true);
   };
 
@@ -153,7 +173,14 @@ export default function UsersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">用户管理</h1>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={(open) => {
+          setIsDialogOpen(open);
+          if (!open) {
+            setEditingUser(null);
+            setSelectedRoles([]);
+            form.reset();
+          }
+        }}>
           <DialogTrigger asChild>
             <Button>添加用户</Button>
           </DialogTrigger>
@@ -220,6 +247,44 @@ export default function UsersPage() {
                   )}
                 </div>
               )}
+              <div className="space-y-2">
+                <Label>分配角色</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start",
+                        !selectedRoles.length && "text-muted-foreground"
+                      )}
+                      type="button"
+                    >
+                      {selectedRoles.length
+                        ? rolesQuery.data?.filter((r: any) => selectedRoles.includes(r.id)).map((r: any) => r.name).join("，")
+                        : "请选择角色"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-60 p-2">
+                    <div className="flex flex-col gap-2 max-h-60 overflow-auto">
+                      {rolesQuery.data?.map((role: any) => (
+                        <label key={role.id} className="flex items-center gap-2 cursor-pointer">
+                          <Checkbox
+                            checked={selectedRoles.includes(role.id)}
+                            onCheckedChange={(checked: boolean) => {
+                              setSelectedRoles((prev) =>
+                                checked
+                                  ? [...prev, role.id]
+                                  : prev.filter((id) => id !== role.id)
+                              );
+                            }}
+                          />
+                          <span>{role.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
               <div className="flex justify-end gap-2">
                 <Button
                   type="button"
@@ -228,6 +293,7 @@ export default function UsersPage() {
                     setIsDialogOpen(false);
                     form.reset();
                     setEditingUser(null);
+                    setSelectedRoles([]);
                   }}
                 >
                   取消
@@ -255,6 +321,7 @@ export default function UsersPage() {
               <TableHead>用户名</TableHead>
               <TableHead>姓名</TableHead>
               <TableHead>邮箱</TableHead>
+              <TableHead>角色</TableHead>
               <TableHead>创建时间</TableHead>
               <TableHead className="text-right">操作</TableHead>
             </TableRow>
@@ -265,6 +332,11 @@ export default function UsersPage() {
                 <TableCell>{user.username}</TableCell>
                 <TableCell>{user.name}</TableCell>
                 <TableCell>{user.email}</TableCell>
+                <TableCell>
+                  {user.roles?.length
+                    ? user.roles.map((r: any) => r.name).join("，")
+                    : <span className="text-muted-foreground">无</span>}
+                </TableCell>
                 <TableCell>
                   {new Date(user.createdAt).toLocaleString()}
                 </TableCell>

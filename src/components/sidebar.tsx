@@ -23,22 +23,22 @@ const menuItems = [
   },
   {
     title: '用户管理',
-    href: '/dashboard/users',
+    href: '/users',
     icon: Users,
   },
   {
     title: '角色管理',
-    href: '/dashboard/roles',
+    href: '/roles',
     icon: Shield,
   },
   {
     title: '菜单管理',
-    href: '/dashboard/menus',
+    href: '/menus',
     icon: MenuIcon,
   },
   {
     title: '系统设置',
-    href: '/dashboard/settings',
+    href: '/settings',
     icon: Settings,
   },
 ];

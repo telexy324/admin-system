@@ -21,16 +21,15 @@ model User {
   email     String   @unique
   name      String
   avatar    String?
-  role      Role     @relation(fields: [roleId], references: [id])
-  roleId    Int
   status    Int      @default(1) // 1: 正常, 2: 禁用
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // 关联
+  roles     Role[]   @relation("UserRoles")
   logs      Log[]
-  leaves    Leave[]  @relation("CreatedByUser") // 添加假期关联
-  approvedLeaves    Leave[]  @relation("ApprovedByUser") // 添加假期关联
+  leaves    Leave[]  @relation("UserLeaves")
+  approvedLeaves Leave[] @relation("ApprovedLeaves")
 
   @@map("users")
 }
@@ -40,7 +39,7 @@ model Role {
   id          Int       @id @default(autoincrement())
   name        String    @unique
   description String?
-  users       User[]
+  users       User[]    @relation("UserRoles")
   permissions Permission[] @relation("RolePermissions")
   menus       Menu[]    @relation("RoleMenus")
   createdAt   DateTime  @default(now())
@@ -125,9 +124,9 @@ model Leave {
   updatedAt   DateTime   @updatedAt
 
   // 关联
-  user        User       @relation("CreatedByUser", fields: [userId], references: [id])
+  user        User       @relation("UserLeaves", fields: [userId], references: [id])
   type        LeaveType  @relation(fields: [typeId], references: [id])
-  approver    User?      @relation("ApprovedByUser", fields: [approvedBy], references: [id])
+  approver    User?      @relation("ApprovedLeaves", fields: [approvedBy], references: [id])
 
   @@map("leaves")
 }
