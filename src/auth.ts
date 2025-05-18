@@ -3,7 +3,6 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import { PrismaClient } from "@prisma/client";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-import { authConfig } from "./auth.config";
 import { Role, Permission, Menu } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -42,13 +41,11 @@ declare module "next-auth/jwt" {
   }
 }
 
-export const { auth, signIn, signOut } = NextAuth(authConfig);
-
 export const {
   handlers: { GET, POST },
-  auth: authHandler,
-  signIn: signInHandler,
-  signOut: signOutHandler,
+  auth,
+  signIn,
+  signOut,
 } = NextAuth({
   adapter: PrismaAdapter(prisma) as any,
   session: {
@@ -64,13 +61,16 @@ export const {
         email: { label: "邮箱", type: "email" },
         password: { label: "密码", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials: Partial<Record<"email" | "password", unknown>>) {
         if (!credentials?.email || !credentials?.password) {
-          return null;
+          throw new Error("邮箱和密码不能为空");
         }
 
+        const email = credentials.email as string;
+        const password = credentials.password as string;
+
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
+          where: { email },
           include: {
             roles: {
               include: {
@@ -82,16 +82,16 @@ export const {
         });
 
         if (!user) {
-          return null;
+          throw new Error("用户不存在");
         }
 
         const isPasswordValid = await bcrypt.compare(
-          credentials.password,
+          password,
           user.password
         );
 
         if (!isPasswordValid) {
-          return null;
+          throw new Error("密码错误");
         }
 
         return {
