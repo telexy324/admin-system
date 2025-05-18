@@ -7,10 +7,12 @@ declare module "next-auth" {
     username: string;
     email: string;
     name: string;
-    role: Role & {
+    avatar?: string | null;
+    status: number;
+    roles: (Role & {
       permissions: Permission[];
       menus: Menu[];
-    };
+    })[];
   }
 
   interface Session {
@@ -24,9 +26,11 @@ declare module "next-auth/jwt" {
     username: string;
     email: string;
     name: string;
-    role: Role & {
+    avatar?: string | null;
+    status: number;
+    roles: (Role & {
       permissions: Permission[];
       menus: Menu[];
-    };
+    })[];
   }
 } 

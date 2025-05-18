@@ -2,7 +2,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { NextAuthOptions } from "next-auth";
+import { NextAuthConfig } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 
@@ -30,14 +30,15 @@ export async function verifyJWT(token: string) {
 }
 
 export async function getCurrentUser() {
-  const token = cookies().get("token")?.value;
+  const cookieStore = await cookies();
+  const token = cookieStore.get("token")?.value;
   if (!token) return null;
 
   const payload = await verifyJWT(token);
   if (!payload) return null;
 
   const user = await prisma.user.findUnique({
-    where: { id: payload.sub as string },
+    where: { id: parseInt(payload.sub as string) },
     include: {
       roles: {
         include: {
@@ -63,51 +64,12 @@ export async function hasPermission(permissionCode: string) {
   const user = await getCurrentUser();
   if (!user) return false;
 
-  return user.roles.some((role) =>
-    role.permissions.some((permission) => permission.code === permissionCode)
+  return user.roles.some((role: any) =>
+    role.permissions.some((permission: any) => permission.code === permissionCode)
   );
 }
 
-// 扩展 next-auth 的类型定义
-declare module "next-auth" {
-  interface User {
-    id: string;
-    username: string;
-    name: string;
-    email: string;
-    role: {
-      id: number;
-      name: string;
-      permissions: {
-        id: number;
-        name: string;
-        code: string;
-      }[];
-    };
-  }
-
-  interface Session {
-    user: User;
-  }
-}
-
-declare module "next-auth/jwt" {
-  interface JWT {
-    id: string;
-    username: string;
-    role: {
-      id: number;
-      name: string;
-      permissions: {
-        id: number;
-        name: string;
-        code: string;
-      }[];
-    };
-  }
-}
-
-export const authOptions: NextAuthOptions = {
+export const authOptions: NextAuthConfig = {
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -115,15 +77,16 @@ export const authOptions: NextAuthOptions = {
         username: { label: "用户名", type: "text" },
         password: { label: "密码", type: "password" }
       },
-      async authorize(credentials) {
+      async authorize(credentials: Partial<Record<"username" | "password", unknown>> | undefined) {
         if (!credentials?.username || !credentials?.password) {
           return null;
         }
-
+        const username = credentials.username as string;
+        const password = credentials.password as string;
         const user = await prisma.user.findUnique({
-          where: { username: credentials.username },
+          where: { username },
           include: {
-            role: {
+            roles: {
               include: {
                 permissions: true,
                 menus: true
@@ -136,7 +99,7 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        const isPasswordValid = await compare(credentials.password, user.password);
+        const isPasswordValid = await compare(password, user.password);
 
         if (!isPasswordValid) {
           return null;
@@ -144,29 +107,38 @@ export const authOptions: NextAuthOptions = {
 
         return {
           id: user.id.toString(),
+          username: user.username,
           name: user.name,
           email: user.email,
-          role: user.role,
-          permissions: user.role.permissions.map(p => p.code),
-          menus: user.role.menus.map(m => m.path)
-        };
+          avatar: user.avatar,
+          status: user.status,
+          roles: user.roles
+        } as any;
       }
     })
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user }: { token: any; user?: any }) {
       if (user) {
-        token.role = user.role;
-        token.permissions = user.permissions;
-        token.menus = user.menus;
+        token.id = user.id;
+        token.username = user.username;
+        token.name = user.name;
+        token.email = user.email;
+        token.avatar = user.avatar;
+        token.status = user.status;
+        token.roles = user.roles;
       }
       return token;
     },
-    async session({ session, token }) {
+    async session({ session, token }: { session: any; token: any }) {
       if (token) {
-        session.user.role = token.role;
-        session.user.permissions = token.permissions;
-        session.user.menus = token.menus;
+        session.user.id = token.id as string;
+        session.user.username = token.username as string;
+        session.user.name = token.name as string;
+        session.user.email = token.email as string;
+        session.user.avatar = token.avatar as string | null;
+        session.user.status = token.status as number;
+        session.user.roles = token.roles as any;
       }
       return session;
     }
@@ -187,34 +159,31 @@ export async function getServerSession() {
     return null;
   }
 
-  const session = await prisma.session.findUnique({
-    where: { sessionToken: token.value },
+  const user = await prisma.user.findUnique({
+    where: { id: parseInt(token.value) },
     include: {
-      user: {
+      roles: {
         include: {
-          role: {
-            include: {
-              permissions: true,
-              menus: true
-            }
-          }
+          permissions: true,
+          menus: true
         }
       }
     }
   });
 
-  if (!session) {
+  if (!user) {
     return null;
   }
 
   return {
     user: {
-      id: session.user.id.toString(),
-      name: session.user.name,
-      email: session.user.email,
-      role: session.user.role,
-      permissions: session.user.role.permissions.map((p: { code: string }) => p.code),
-      menus: session.user.role.menus.map((m: { path: string }) => m.path)
+      id: user.id.toString(),
+      username: user.username,
+      name: user.name,
+      email: user.email,
+      avatar: user.avatar,
+      status: user.status,
+      roles: user.roles
     }
   };
 } 
