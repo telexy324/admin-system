@@ -4,6 +4,7 @@ import { PrismaClient } from "@prisma/client";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { authConfig } from "./auth.config";
+import { Role, Permission, Menu } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -13,19 +14,12 @@ declare module "next-auth" {
     username: string;
     email: string;
     name: string;
-    role: {
-      id: number;
-      name: string;
-      permissions: {
-        id: number;
-        name: string;
-      }[];
-      menus: {
-        id: number;
-        name: string;
-        path: string;
-      }[];
-    };
+    avatar?: string | null;
+    status: number;
+    roles: (Role & {
+      permissions: Permission[];
+      menus: Menu[];
+    })[];
   }
 
   interface Session {
@@ -39,19 +33,12 @@ declare module "next-auth/jwt" {
     username: string;
     email: string;
     name: string;
-    role: {
-      id: number;
-      name: string;
-      permissions: {
-        id: number;
-        name: string;
-      }[];
-      menus: {
-        id: number;
-        name: string;
-        path: string;
-      }[];
-    };
+    avatar?: string | null;
+    status: number;
+    roles: (Role & {
+      permissions: Permission[];
+      menus: Menu[];
+    })[];
   }
 }
 
@@ -74,18 +61,18 @@ export const {
     CredentialsProvider({
       name: "Credentials",
       credentials: {
-        username: { label: "用户名", type: "text" },
+        email: { label: "邮箱", type: "email" },
         password: { label: "密码", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.username || !credentials?.password) {
+        if (!credentials?.email || !credentials?.password) {
           return null;
         }
 
         const user = await prisma.user.findUnique({
-          where: { username: credentials.username },
+          where: { email: credentials.email },
           include: {
-            role: {
+            roles: {
               include: {
                 permissions: true,
                 menus: true,
@@ -112,7 +99,9 @@ export const {
           username: user.username,
           email: user.email,
           name: user.name,
-          role: user.role,
+          avatar: user.avatar,
+          status: user.status,
+          roles: user.roles,
         };
       },
     }),
@@ -124,7 +113,9 @@ export const {
         token.username = user.username;
         token.email = user.email;
         token.name = user.name;
-        token.role = user.role;
+        token.avatar = user.avatar;
+        token.status = user.status;
+        token.roles = user.roles;
       }
       return token;
     },
@@ -134,7 +125,9 @@ export const {
         session.user.username = token.username;
         session.user.email = token.email;
         session.user.name = token.name;
-        session.user.role = token.role;
+        session.user.avatar = token.avatar;
+        session.user.status = token.status;
+        session.user.roles = token.roles;
       }
       return session;
     },

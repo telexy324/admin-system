@@ -21,18 +21,18 @@ export const authConfig = {
     Credentials({
       name: "Credentials",
       credentials: {
-        username: { label: "用户名", type: "text" },
+        email: { label: "邮箱", type: "email" },
         password: { label: "密码", type: "password" },
       },
-      async authorize(credentials: Partial<Record<"username" | "password", unknown>>) {
-        if (!credentials?.username || !credentials?.password) {
+      async authorize(credentials: Partial<Record<"email" | "password", unknown>>) {
+        if (!credentials?.email || !credentials?.password) {
           return null;
         }
 
         const user = await prisma.user.findUnique({
-          where: { username: credentials.username as string },
+          where: { email: credentials.email as string },
           include: {
-            role: {
+            roles: {
               include: {
                 permissions: true,
                 menus: true,
@@ -59,7 +59,9 @@ export const authConfig = {
           username: user.username,
           email: user.email,
           name: user.name,
-          role: user.role,
+          avatar: user.avatar,
+          status: user.status,
+          roles: user.roles,
         } as User;
       },
     }),
@@ -71,7 +73,9 @@ export const authConfig = {
         token.username = user.username;
         token.email = user.email;
         token.name = user.name;
-        token.role = user.role;
+        token.avatar = user.avatar;
+        token.status = user.status;
+        token.roles = user.roles;
       }
       return token;
     },
@@ -81,7 +85,9 @@ export const authConfig = {
         session.user.username = token.username;
         session.user.email = token.email;
         session.user.name = token.name;
-        session.user.role = token.role;
+        session.user.avatar = token.avatar;
+        session.user.status = token.status;
+        session.user.roles = token.roles;
       }
       return session;
     },

@@ -1,6 +1,5 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
-import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { NextAuthConfig } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
