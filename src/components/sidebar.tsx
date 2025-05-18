@@ -10,6 +10,7 @@ import {
   Menu as MenuIcon,
   Settings,
   LogOut,
+  KeyRound,
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -30,6 +31,11 @@ const menuItems = [
     title: '角色管理',
     href: '/roles',
     icon: Shield,
+  },
+  {
+    title: '权限管理',
+    href: '/permissions',
+    icon: KeyRound,
   },
   {
     title: '菜单管理',

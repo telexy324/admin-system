@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -23,18 +23,18 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Label } from "@/components/ui/label";
+import { useToast } from "@/components/ui/use-toast";
 
 // 权限表单验证模式
 const permissionFormSchema = z.object({
   id: z.number().optional(),
   name: z.string().min(2, "权限名称至少2个字符"),
-  code: z.string().min(2, "权限代码至少2个字符"),
   description: z.string().min(2, "权限描述至少2个字符"),
 });
 
 type PermissionFormValues = z.infer<typeof permissionFormSchema>;
 
-// 模拟获取权限列表
+// 获取权限列表
 async function fetchPermissions() {
   const response = await fetch("/api/permissions");
   if (!response.ok) {
@@ -42,9 +42,9 @@ async function fetchPermissions() {
   }
   const data = await response.json();
   return {
-    permissions: data.permissions || [],
-    total: data.total || 0,
-    hasMore: data.hasMore || false,
+    permissions: data.data?.items || [],
+    total: data.data?.total || 0,
+    hasMore: data.data?.hasMore || false,
   };
 }
 
@@ -53,6 +53,8 @@ export default function PermissionsPage() {
   const [search, setSearch] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPermission, setEditingPermission] = useState<PermissionFormValues | null>(null);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   // 获取权限列表
   const { data, isLoading, error } = useQuery({
@@ -65,7 +67,6 @@ export default function PermissionsPage() {
     resolver: zodResolver(permissionFormSchema),
     defaultValues: {
       name: "",
-      code: "",
       description: "",
     },
   });
@@ -87,11 +88,20 @@ export default function PermissionsPage() {
         throw new Error("保存权限失败");
       }
 
+      toast({
+        title: "成功",
+        description: values.id ? "权限更新成功" : "权限创建成功",
+      });
+
       setIsDialogOpen(false);
       form.reset();
-      // TODO: 刷新权限列表
+      queryClient.invalidateQueries({ queryKey: ["permissions"] });
     } catch (error) {
-      console.error("保存权限失败:", error);
+      toast({
+        title: "错误",
+        description: "保存权限失败",
+        variant: "destructive",
+      });
     }
   };
 
@@ -117,9 +127,18 @@ export default function PermissionsPage() {
         throw new Error("删除权限失败");
       }
 
-      // TODO: 刷新权限列表
+      toast({
+        title: "成功",
+        description: "权限删除成功",
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["permissions"] });
     } catch (error) {
-      console.error("删除权限失败:", error);
+      toast({
+        title: "错误",
+        description: "删除权限失败",
+        variant: "destructive",
+      });
     }
   };
 
@@ -130,7 +149,13 @@ export default function PermissionsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">权限管理</h1>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={(open) => {
+          setIsDialogOpen(open);
+          if (!open) {
+            setEditingPermission(null);
+            form.reset();
+          }
+        }}>
           <DialogTrigger asChild>
             <Button>添加权限</Button>
           </DialogTrigger>
@@ -151,19 +176,6 @@ export default function PermissionsPage() {
                 {form.formState.errors.name && (
                   <p className="text-sm text-red-500">
                     {form.formState.errors.name.message}
-                  </p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="code">权限代码</Label>
-                <Input
-                  id="code"
-                  {...form.register("code")}
-                  placeholder="请输入权限代码"
-                />
-                {form.formState.errors.code && (
-                  <p className="text-sm text-red-500">
-                    {form.formState.errors.code.message}
                   </p>
                 )}
               </div>
@@ -213,9 +225,7 @@ export default function PermissionsPage() {
           <TableHeader>
             <TableRow>
               <TableHead>权限名称</TableHead>
-              <TableHead>权限代码</TableHead>
               <TableHead>描述</TableHead>
-              <TableHead>创建时间</TableHead>
               <TableHead className="text-right">操作</TableHead>
             </TableRow>
           </TableHeader>
@@ -223,11 +233,7 @@ export default function PermissionsPage() {
             {data?.permissions?.map((permission: any) => (
               <TableRow key={permission.id}>
                 <TableCell>{permission.name}</TableCell>
-                <TableCell>{permission.code}</TableCell>
                 <TableCell>{permission.description}</TableCell>
-                <TableCell>
-                  {new Date(permission.createdAt).toLocaleString()}
-                </TableCell>
                 <TableCell className="text-right">
                   <Button
                     variant="ghost"

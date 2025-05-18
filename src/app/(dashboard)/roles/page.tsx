@@ -46,6 +46,14 @@ async function fetchUsers() {
   return data.data?.items || [];
 }
 
+// 获取所有权限
+async function fetchPermissions() {
+  const response = await fetch("/api/permissions?page=1&limit=1000");
+  if (!response.ok) throw new Error("获取权限失败");
+  const data = await response.json();
+  return data.data?.items || [];
+}
+
 // 模拟获取角色列表
 async function fetchRoles() {
   const response = await fetch("/api/roles");
@@ -54,9 +62,9 @@ async function fetchRoles() {
   }
   const data = await response.json();
   return {
-    roles: data.roles || [],
-    total: data.total || 0,
-    hasMore: data.hasMore || false,
+    roles: data.data?.items || [],
+    total: data.data?.total || 0,
+    hasMore: data.data?.hasMore || false,
   };
 }
 
@@ -66,6 +74,7 @@ export default function RolesPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<RoleFormValues | null>(null);
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
+  const [selectedPermissions, setSelectedPermissions] = useState<number[]>([]);
 
   // 获取角色列表
   const { data, isLoading, error } = useQuery({
@@ -76,6 +85,11 @@ export default function RolesPage() {
   const usersQuery = useQuery({
     queryKey: ["users"],
     queryFn: fetchUsers,
+  });
+
+  const permissionsQuery = useQuery({
+    queryKey: ["permissions"],
+    queryFn: fetchPermissions,
   });
 
   // 表单处理
@@ -93,7 +107,7 @@ export default function RolesPage() {
     try {
       const url = values.id ? `/api/roles/${values.id}` : "/api/roles";
       const method = values.id ? "PUT" : "POST";
-      const body = { ...values, userIds: selectedUsers };
+      const body = { ...values, userIds: selectedUsers, permissionIds: selectedPermissions };
       const response = await fetch(url, {
         method,
         headers: {
@@ -109,6 +123,7 @@ export default function RolesPage() {
       setIsDialogOpen(false);
       form.reset();
       setSelectedUsers([]);
+      setSelectedPermissions([]);
       // TODO: 刷新角色列表
     } catch (error) {
       console.error("保存角色失败:", error);
@@ -120,6 +135,7 @@ export default function RolesPage() {
     setEditingRole(role);
     form.reset({ ...role, userIds: role.users?.map((u: any) => u.id) || [] });
     setSelectedUsers(role.users?.map((u: any) => u.id) || []);
+    setSelectedPermissions(role.permissions?.map((p: any) => p.id) || []);
     setIsDialogOpen(true);
   };
 
@@ -156,6 +172,7 @@ export default function RolesPage() {
           if (!open) {
             setEditingRole(null);
             setSelectedUsers([]);
+            setSelectedPermissions([]);
             form.reset();
           }
         }}>
@@ -233,6 +250,44 @@ export default function RolesPage() {
                   </PopoverContent>
                 </Popover>
               </div>
+              <div className="space-y-2">
+                <Label>分配权限</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start",
+                        !selectedPermissions.length && "text-muted-foreground"
+                      )}
+                      type="button"
+                    >
+                      {selectedPermissions.length
+                        ? permissionsQuery.data?.filter((p: any) => selectedPermissions.includes(p.id)).map((p: any) => p.name).join("，")
+                        : "请选择权限"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-60 p-2">
+                    <div className="flex flex-col gap-2 max-h-60 overflow-auto">
+                      {permissionsQuery.data?.map((permission: any) => (
+                        <label key={permission.id} className="flex items-center gap-2 cursor-pointer">
+                          <Checkbox
+                            checked={selectedPermissions.includes(permission.id)}
+                            onCheckedChange={(checked: boolean) => {
+                              setSelectedPermissions((prev) =>
+                                checked
+                                  ? [...prev, permission.id]
+                                  : prev.filter((id) => id !== permission.id)
+                              );
+                            }}
+                          />
+                          <span>{permission.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
               <div className="flex justify-end gap-2">
                 <Button
                   type="button"
@@ -242,6 +297,7 @@ export default function RolesPage() {
                     form.reset();
                     setEditingRole(null);
                     setSelectedUsers([]);
+                    setSelectedPermissions([]);
                   }}
                 >
                   取消
@@ -269,6 +325,7 @@ export default function RolesPage() {
               <TableHead>角色名称</TableHead>
               <TableHead>描述</TableHead>
               <TableHead>关联用户</TableHead>
+              <TableHead>关联权限</TableHead>
               <TableHead className="text-right">操作</TableHead>
             </TableRow>
           </TableHeader>
@@ -280,6 +337,11 @@ export default function RolesPage() {
                 <TableCell>
                   {role.users?.length
                     ? role.users.map((u: any) => u.name).join("，")
+                    : <span className="text-muted-foreground">无</span>}
+                </TableCell>
+                <TableCell>
+                  {role.permissions?.length
+                    ? role.permissions.map((p: any) => p.name).join("，")
                     : <span className="text-muted-foreground">无</span>}
                 </TableCell>
                 <TableCell className="text-right">

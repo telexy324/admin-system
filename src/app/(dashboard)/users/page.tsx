@@ -48,9 +48,9 @@ async function fetchUsers() {
   }
   const data = await response.json();
   return {
-    users: data.users || [],
-    total: data.total || 0,
-    hasMore: data.hasMore || false,
+    users: data.data?.items || [],
+    total: data.data?.total || 0,
+    hasMore: data.data?.hasMore || false,
   };
 }
 
