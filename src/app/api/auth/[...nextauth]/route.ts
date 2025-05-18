@@ -28,13 +28,16 @@ export const {
         email: { label: '邮箱', type: 'email' },
         password: { label: '密码', type: 'password' },
       },
-      async authorize(credentials: Record<"email" | "password", string> | undefined) {
+      async authorize(credentials: Partial<Record<"email" | "password", unknown>>) {
         if (!credentials?.email || !credentials?.password) {
           throw new Error('邮箱和密码不能为空');
         }
 
+        const email = credentials.email as string;
+        const password = credentials.password as string;
+
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
+          where: { email },
           include: {
             roles: {
               include: {
@@ -49,7 +52,7 @@ export const {
           throw new Error('用户不存在');
         }
 
-        const isValidPassword = await compare(credentials.password, user.password);
+        const isValidPassword = await compare(password, user.password);
         if (!isValidPassword) {
           throw new Error('密码错误');
         }
