@@ -17,24 +17,36 @@ if (process.env.NODE_ENV !== "production") {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { username, password } = body;
+    const { email, password, username, name } = body;
 
-    // 验证用户名和密码
-    if (!username || !password) {
+    // 验证必填字段
+    if (!email || !password || !username) {
       return NextResponse.json(
-        { error: "用户名和密码不能为空" },
+        { error: "邮箱、用户名和密码不能为空" },
+        { status: 400 }
+      );
+    }
+
+    // 检查邮箱是否已存在
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (existingUser) {
+      return NextResponse.json(
+        { error: "该邮箱已被注册" },
         { status: 400 }
       );
     }
 
     // 检查用户名是否已存在
-    const existingUser = await prisma.user.findUnique({
-      where: { email: username },
+    const existingUsername = await prisma.user.findUnique({
+      where: { username },
     });
 
-    if (existingUser) {
+    if (existingUsername) {
       return NextResponse.json(
-        { error: "用户名已存在" },
+        { error: "该用户名已被使用" },
         { status: 400 }
       );
     }
@@ -57,9 +69,11 @@ export async function POST(request: Request) {
     // 创建用户
     const user = await prisma.user.create({
       data: {
-        email: username,
+        username,
+        email,
         password: hashedPassword,
-        name: username,
+        name: name || username,
+        status: 1, // 1: 正常
         roles: {
           connect: {
             id: defaultRole.id,
@@ -67,12 +81,21 @@ export async function POST(request: Request) {
         },
       },
       include: {
-        roles: true,
+        roles: {
+          include: {
+            permissions: true,
+            menus: true,
+          },
+        },
       },
     });
 
     // 生成 JWT token
-    const token = await new SignJWT({ userId: user.id })
+    const token = await new SignJWT({
+      id: user.id,
+      email: user.email,
+      roles: user.roles,
+    })
       .setProtectedHeader({ alg: "HS256" })
       .setExpirationTime("24h")
       .sign(new TextEncoder().encode(process.env.JWT_SECRET || "your-secret-key"));
@@ -82,8 +105,11 @@ export async function POST(request: Request) {
       message: "注册成功",
       user: {
         id: user.id,
+        username: user.username,
         email: user.email,
         name: user.name,
+        avatar: user.avatar,
+        status: user.status,
         roles: user.roles,
       },
     });
@@ -96,6 +122,7 @@ export async function POST(request: Request) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: 60 * 60 * 24, // 24 hours
+      path: '/',
     });
 
     return response;
