@@ -26,3 +26,12 @@ ALTER TABLE "_UserRoles" ADD CONSTRAINT "_UserRoles_A_fkey" FOREIGN KEY ("A") RE
 
 -- AddForeignKey
 ALTER TABLE "_UserRoles" ADD CONSTRAINT "_UserRoles_B_fkey" FOREIGN KEY ("B") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AlterTable
+ALTER TABLE "permissions" ADD COLUMN "path" TEXT NOT NULL DEFAULT '/';
+ALTER TABLE "permissions" ADD COLUMN "method" TEXT NOT NULL DEFAULT 'GET';
+ALTER TABLE "permissions" ALTER COLUMN "path" DROP DEFAULT;
+ALTER TABLE "permissions" ALTER COLUMN "method" DROP DEFAULT;
+
+-- CreateIndex
+CREATE UNIQUE INDEX "permissions_path_method_key" ON "permissions"("path", "method");

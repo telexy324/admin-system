@@ -17,39 +17,83 @@ async function main() {
   // 创建默认权限
   const permissions = await Promise.all([
     prisma.permission.upsert({
-      where: { code: 'user:read' },
+      where: { name: '查看用户列表' },
       update: {},
       create: {
-        name: '查看用户',
-        code: 'user:read',
+        name: '查看用户列表',
         description: '查看用户列表和详情',
+        path: '/api/users',
+        method: 'GET',
       },
     }),
     prisma.permission.upsert({
-      where: { code: 'user:write' },
+      where: { name: '创建用户' },
       update: {},
       create: {
-        name: '管理用户',
-        code: 'user:write',
-        description: '创建、编辑、删除用户',
+        name: '创建用户',
+        description: '创建新用户',
+        path: '/api/users',
+        method: 'POST',
       },
     }),
     prisma.permission.upsert({
-      where: { code: 'role:read' },
+      where: { name: '更新用户' },
       update: {},
       create: {
-        name: '查看角色',
-        code: 'role:read',
+        name: '更新用户',
+        description: '更新用户信息',
+        path: '/api/users/:id',
+        method: 'PUT',
+      },
+    }),
+    prisma.permission.upsert({
+      where: { name: '删除用户' },
+      update: {},
+      create: {
+        name: '删除用户',
+        description: '删除用户',
+        path: '/api/users/:id',
+        method: 'DELETE',
+      },
+    }),
+    prisma.permission.upsert({
+      where: { name: '查看角色列表' },
+      update: {},
+      create: {
+        name: '查看角色列表',
         description: '查看角色列表和详情',
+        path: '/api/roles',
+        method: 'GET',
       },
     }),
     prisma.permission.upsert({
-      where: { code: 'role:write' },
+      where: { name: '创建角色' },
       update: {},
       create: {
-        name: '管理角色',
-        code: 'role:write',
-        description: '创建、编辑、删除角色',
+        name: '创建角色',
+        description: '创建新角色',
+        path: '/api/roles',
+        method: 'POST',
+      },
+    }),
+    prisma.permission.upsert({
+      where: { name: '更新角色' },
+      update: {},
+      create: {
+        name: '更新角色',
+        description: '更新角色信息',
+        path: '/api/roles/:id',
+        method: 'PUT',
+      },
+    }),
+    prisma.permission.upsert({
+      where: { name: '删除角色' },
+      update: {},
+      create: {
+        name: '删除角色',
+        description: '删除角色',
+        path: '/api/roles/:id',
+        method: 'DELETE',
       },
     }),
   ]);
@@ -67,53 +111,48 @@ async function main() {
   // 创建默认菜单
   const menus = await Promise.all([
     prisma.menu.upsert({
-      where: { path: '/dashboard' },
+      where: { name: '仪表盘' },
       update: {},
       create: {
         name: '仪表盘',
         path: '/dashboard',
         icon: 'dashboard',
-        order: 1,
       },
     }),
     prisma.menu.upsert({
-      where: { path: '/users' },
+      where: { name: '用户管理' },
       update: {},
       create: {
         name: '用户管理',
         path: '/users',
         icon: 'user',
-        order: 2,
       },
     }),
     prisma.menu.upsert({
-      where: { path: '/roles' },
+      where: { name: '角色管理' },
       update: {},
       create: {
         name: '角色管理',
         path: '/roles',
         icon: 'team',
-        order: 3,
       },
     }),
     prisma.menu.upsert({
-      where: { path: '/permissions' },
+      where: { name: '权限管理' },
       update: {},
       create: {
         name: '权限管理',
         path: '/permissions',
         icon: 'safety',
-        order: 4,
       },
     }),
     prisma.menu.upsert({
-      where: { path: '/menus' },
+      where: { name: '菜单管理' },
       update: {},
       create: {
         name: '菜单管理',
         path: '/menus',
         icon: 'menu',
-        order: 5,
       },
     }),
   ]);
@@ -138,7 +177,9 @@ async function main() {
       password: hashedPassword,
       name: '管理员',
       email: 'admin@example.com',
-      roleId: adminRole.id,
+      roles: {
+        connect: [{ id: adminRole.id }],
+      },
     },
   });
 
