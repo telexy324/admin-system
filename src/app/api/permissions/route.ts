@@ -73,7 +73,14 @@ export async function POST(request: Request) {
     }
 
     const data = await request.json();
-    const { name, description } = data;
+    const { name, description, path, method } = data;
+
+    if (!name || !path || !method) {
+      return NextResponse.json(
+        { code: 400, message: "权限名、路径和方法不能为空", data: null },
+        { status: 400 }
+      );
+    }
 
     // 检查权限名是否已存在
     const existingPermission = await prisma.permission.findUnique({
@@ -87,10 +94,27 @@ export async function POST(request: Request) {
       );
     }
 
+    // 检查路径和方法组合是否已存在
+    const existingPathMethod = await prisma.permission.findFirst({
+      where: {
+        path,
+        method,
+      },
+    });
+
+    if (existingPathMethod) {
+      return NextResponse.json(
+        { code: 400, message: "该路径和方法的组合已存在", data: null },
+        { status: 400 }
+      );
+    }
+
     const permission = await prisma.permission.create({
       data: {
         name,
         description,
+        path,
+        method,
       },
       include: {
         roles: true,

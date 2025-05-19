@@ -214,7 +214,13 @@ export async function DELETE(request: Request) {
 
     // 检查是否有用户使用该角色
     const usersWithRole = await prisma.user.findFirst({
-      where: { roleId: id },
+      where: {
+        roles: {
+          some: {
+            id: id
+          }
+        }
+      }
     });
 
     if (usersWithRole) {
