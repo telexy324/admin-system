@@ -21,6 +21,7 @@ model User {
   leaves         Leave[]  @relation("UserLeaves")
   logs           Log[]
   roles          Role[]   @relation("UserRoles")
+  files          Storage[]
 
   @@map("users")
 }
@@ -112,4 +113,21 @@ model Leave {
   user       User      @relation("UserLeaves", fields: [userId], references: [id])
 
   @@map("leaves")
+}
+
+model Storage {
+  id          Int      @id @default(autoincrement())
+  name        String   // 原始文件名
+  key         String   @unique // 存储的文件名（UUID）
+  url         String   // 文件访问URL
+  size        Int      // 文件大小（字节）
+  type        String   // 文件MIME类型
+  storageType String   // 存储类型（local/supabase）
+  bucket      String?  // 存储桶名称（用于云存储）
+  userId      Int?     // 上传用户ID
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User?    @relation(fields: [userId], references: [id])
+
+  @@map("storages")
 }
