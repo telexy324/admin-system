@@ -28,10 +28,33 @@ export async function parseRequest<T extends z.ZodType>(
         data = await request.json();
       } else if (contentType.includes('application/x-www-form-urlencoded')) {
         const formData = await request.formData();
-        data = Object.fromEntries(formData.entries());
+        const formEntries: [string, string][] = [];
+        for (const pair of formData as unknown as Iterable<[string, FormDataEntryValue]>) {
+          const [key, value] = pair;
+          if (value !== null) {
+            formEntries.push([key, value.toString()]);
+          }
+        }
+        data = Object.fromEntries(formEntries);
       } else if (contentType.includes('multipart/form-data')) {
         const formData = await request.formData();
-        data = Object.fromEntries(formData.entries());
+        // 处理文件上传
+        const files: Record<string, File> = {};
+        const fields: Record<string, string> = {};
+        
+        for (const pair of formData as unknown as Iterable<[string, FormDataEntryValue]>) {
+          const [key, value] = pair;
+          if (value instanceof File) {
+            files[key] = value;
+          } else if (value !== null) {
+            fields[key] = value.toString();
+          }
+        }
+        
+        data = {
+          ...fields,
+          files: Object.keys(files).length > 0 ? files : undefined
+        };
       }
     }
 
@@ -50,9 +73,15 @@ export async function parseRequest<T extends z.ZodType>(
  * 创建分页参数验证模式
  */
 export const paginationSchema = z.object({
-  page: z.string().transform(val => parseInt(val) || 1),
-  limit: z.string().transform(val => parseInt(val) || 10),
+  page: z.string()
+    .transform(val => parseInt(val) || 1)
+    .refine(val => val > 0, '页码必须大于 0'),
+  limit: z.string()
+    .transform(val => parseInt(val) || 10)
+    .refine(val => val > 0 && val <= 100, '每页数量必须在 1-100 之间'),
   search: z.string().optional(),
+  sort: z.string().optional(),
+  order: z.enum(['asc', 'desc']).optional(),
 });
 
 /**
@@ -82,7 +111,38 @@ export function createErrorResponse(message: string = 'error', code: number = 40
  */
 export function handleApiError(error: unknown) {
   if (error instanceof Error) {
+    // 处理 Prisma 错误
+    if (error.name === 'PrismaClientKnownRequestError') {
+      return createErrorResponse('数据库操作失败', 500);
+    }
+    if (error.name === 'PrismaClientValidationError') {
+      return createErrorResponse('数据验证失败', 400);
+    }
+    // 处理 Zod 错误
+    if (error instanceof z.ZodError) {
+      return createErrorResponse(`数据验证失败: ${error.errors.map(e => e.message).join(', ')}`, 400);
+    }
+    // 处理其他错误
     return createErrorResponse(error.message);
   }
   return createErrorResponse('未知错误');
+}
+
+/**
+ * 创建分页响应
+ */
+export function createPaginationResponse<T>(
+  data: T[],
+  total: number,
+  page: number,
+  limit: number,
+  message: string = 'success'
+) {
+  return createResponse({
+    items: data,
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
+  }, message);
 } 
