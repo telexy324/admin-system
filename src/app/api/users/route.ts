@@ -1,262 +1,160 @@
-import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import { auth } from "@/auth";
+import { NextRequest } from 'next/server';
+import { z } from 'zod';
+import { prisma } from '@/lib/prisma';
+import { parseRequest, createResponse, createErrorResponse, handleApiError, paginationSchema } from '@/lib/api-utils';
 
-const prisma = new PrismaClient();
+// 用户创建/更新验证模式
+const userSchema = z.object({
+  id: z.number().optional(),
+  username: z.string().min(3, "用户名至少3个字符"),
+  name: z.string().min(2, "姓名至少2个字符"),
+  email: z.string().email("请输入有效的邮箱地址"),
+  password: z.string().min(6, "密码至少6个字符").optional(),
+  roleIds: z.array(z.number()).optional(),
+});
 
-// 获取用户列表
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session) {
-      return NextResponse.json(
-        { code: 401, message: "未授权", data: null },
-        { status: 401 }
-      );
-    }
+    const { page, limit, search } = await parseRequest(request, paginationSchema);
 
-    const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "10");
-    const search = searchParams.get("search") || "";
-    const roleId = searchParams.get("roleId");
-
-    const where = {
-      AND: [
-        search
-          ? {
-              OR: [
-                { username: { contains: search } },
-                { name: { contains: search } },
-                { email: { contains: search } },
-              ],
-            }
-          : {},
-        roleId
-          ? {
-              roles: {
-                some: { id: parseInt(roleId) },
-              },
-            }
-          : {},
+    const where = search ? {
+      OR: [
+        { username: { contains: search } },
+        { name: { contains: search } },
+        { email: { contains: search } },
       ],
-    };
+    } : {};
 
-    const [total, users] = await Promise.all([
+    const [total, items] = await Promise.all([
       prisma.user.count({ where }),
       prisma.user.findMany({
         where,
+        skip: (page - 1) * limit,
+        take: limit,
         include: {
           roles: true,
         },
-        skip: (page - 1) * limit,
-        take: limit,
-        orderBy: { createdAt: "desc" },
+        orderBy: {
+          createdAt: 'desc',
+        },
       }),
     ]);
 
-    return NextResponse.json({
-      code: 200,
-      message: "success",
-      data: {
-        items: users,
-        total,
-        page,
-        limit,
-      },
+    return createResponse({
+      items,
+      total,
+      page,
+      limit,
     });
   } catch (error) {
-    console.error("获取用户列表失败:", error);
-    return NextResponse.json(
-      { code: 500, message: "获取用户列表失败", data: null },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 }
 
-// 创建用户
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session) {
-      return NextResponse.json(
-        { code: 401, message: "未授权", data: null },
-        { status: 401 }
-      );
-    }
-
-    const data = await request.json();
-    const { username, password, email, name, roleIds, avatar, status } = data;
+    const data = await parseRequest(request, userSchema);
 
     // 检查用户名是否已存在
     const existingUser = await prisma.user.findUnique({
-      where: { username },
+      where: { username: data.username },
     });
 
     if (existingUser) {
-      return NextResponse.json(
-        { code: 400, message: "用户名已存在", data: null },
-        { status: 400 }
-      );
+      return createErrorResponse("用户名已存在");
     }
 
-    // 检查邮箱是否已存在
-    const existingEmail = await prisma.user.findUnique({
-      where: { email },
-    });
-
-    if (existingEmail) {
-      return NextResponse.json(
-        { code: 400, message: "邮箱已存在", data: null },
-        { status: 400 }
-      );
-    }
-
+    // 创建用户
     const user = await prisma.user.create({
       data: {
-        username,
-        password, // 注意：实际应用中应该对密码进行加密
-        email,
-        name,
-        avatar,
-        status: status || 1,
-        roles: {
-          connect: (roleIds || []).map((id: number) => ({ id })),
-        },
+        username: data.username,
+        name: data.name,
+        email: data.email,
+        password: data.password, // 注意：实际应用中需要对密码进行加密
+        roles: data.roleIds ? {
+          connect: data.roleIds.map(id => ({ id })),
+        } : undefined,
       },
       include: {
         roles: true,
       },
     });
 
-    return NextResponse.json({
-      code: 200,
-      message: "success",
-      data: user,
-    });
+    return createResponse(user);
   } catch (error) {
-    console.error("创建用户失败:", error);
-    return NextResponse.json(
-      { code: 500, message: "创建用户失败", data: null },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 }
 
-// 更新用户
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session) {
-      return NextResponse.json(
-        { code: 401, message: "未授权", data: null },
-        { status: 401 }
-      );
+    const data = await parseRequest(request, userSchema);
+
+    if (!data.id) {
+      return createErrorResponse("用户ID不能为空");
     }
 
-    const data = await request.json();
-    const { id, username, email, name, roleIds, avatar, status } = data;
+    // 检查用户名是否已被其他用户使用
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        username: data.username,
+        id: { not: data.id },
+      },
+    });
 
-    // 检查用户名是否已存在（排除当前用户）
-    if (username) {
-      const existingUser = await prisma.user.findFirst({
-        where: {
-          username,
-          id: { not: id },
-        },
-      });
-
-      if (existingUser) {
-        return NextResponse.json(
-          { code: 400, message: "用户名已存在", data: null },
-          { status: 400 }
-        );
-      }
+    if (existingUser) {
+      return createErrorResponse("用户名已存在");
     }
 
-    // 检查邮箱是否已存在（排除当前用户）
-    if (email) {
-      const existingEmail = await prisma.user.findFirst({
-        where: {
-          email,
-          id: { not: id },
-        },
-      });
-
-      if (existingEmail) {
-        return NextResponse.json(
-          { code: 400, message: "邮箱已存在", data: null },
-          { status: 400 }
-        );
-      }
-    }
-
+    // 更新用户
     const user = await prisma.user.update({
-      where: { id },
+      where: { id: data.id },
       data: {
-        username,
-        email,
-        name,
-        avatar,
-        status,
-        roles: {
-          set: (roleIds || []).map((id: number) => ({ id })),
-        },
+        username: data.username,
+        name: data.name,
+        email: data.email,
+        ...(data.password && { password: data.password }), // 只在提供密码时更新
+        roles: data.roleIds ? {
+          set: [], // 先清除现有角色
+          connect: data.roleIds.map(id => ({ id })), // 再添加新角色
+        } : undefined,
       },
       include: {
         roles: true,
       },
     });
 
-    return NextResponse.json({
-      code: 200,
-      message: "success",
-      data: user,
-    });
+    return createResponse(user);
   } catch (error) {
-    console.error("更新用户失败:", error);
-    return NextResponse.json(
-      { code: 500, message: "更新用户失败", data: null },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 }
 
-// 删除用户
-export async function DELETE(request: Request) {
+export async function DELETE(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session) {
-      return NextResponse.json(
-        { code: 401, message: "未授权", data: null },
-        { status: 401 }
-      );
+    const { id } = await parseRequest(request, z.object({
+      id: z.string().transform(val => parseInt(val)),
+    }));
+
+    // 检查用户是否存在
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: {
+        roles: true,
+      },
+    });
+
+    if (!user) {
+      return createErrorResponse("用户不存在");
     }
 
-    const { searchParams } = new URL(request.url);
-    const id = parseInt(searchParams.get("id") || "0");
-
-    if (!id) {
-      return NextResponse.json(
-        { code: 400, message: "用户ID不能为空", data: null },
-        { status: 400 }
-      );
-    }
-
+    // 删除用户
     await prisma.user.delete({
       where: { id },
     });
 
-    return NextResponse.json({
-      code: 200,
-      message: "success",
-      data: null,
-    });
+    return createResponse(null, "用户删除成功");
   } catch (error) {
-    console.error("删除用户失败:", error);
-    return NextResponse.json(
-      { code: 500, message: "删除用户失败", data: null },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 } 

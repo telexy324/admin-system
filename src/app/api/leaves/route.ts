@@ -1,292 +1,222 @@
-import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import { auth } from "@/auth";
+import { NextRequest } from 'next/server';
+import { z } from 'zod';
+import { prisma } from '@/lib/prisma';
+import { parseRequest, createResponse, createErrorResponse, handleApiError, paginationSchema } from '@/lib/api-utils';
 
-const prisma = new PrismaClient();
+// 请假创建/更新验证模式
+const leaveSchema = z.object({
+  id: z.number().optional(),
+  userId: z.number(),
+  typeId: z.number(),
+  startDate: z.string().transform(str => new Date(str)),
+  endDate: z.string().transform(str => new Date(str)),
+  days: z.number(),
+  reason: z.string().min(2, "请假原因至少2个字符"),
+  status: z.number().default(0),
+  approvedBy: z.number().optional(),
+  approvedAt: z.string().transform(str => new Date(str)).optional(),
+  comment: z.string().optional(),
+});
 
-// 获取假期申请列表
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session) {
-      return NextResponse.json(
-        { code: 401, message: "未授权", data: null },
-        { status: 401 }
-      );
-    }
+    const { page, limit, search } = await parseRequest(request, paginationSchema);
 
-    const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "10");
-    const search = searchParams.get("search") || "";
-    const status = searchParams.get("status");
-    const userId = searchParams.get("userId");
-
-    const where = {
-      AND: [
-        search
-          ? {
-              OR: [
-                { reason: { contains: search } },
-                { user: { name: { contains: search } } },
-              ],
-            }
-          : {},
-        status ? { status: parseInt(status) } : {},
-        userId ? { userId: parseInt(userId) } : {},
+    const where = search ? {
+      OR: [
+        { reason: { contains: search } },
+        { user: { name: { contains: search } } },
+        { user: { username: { contains: search } } },
       ],
-    };
+    } : {};
 
-    const [total, leaves] = await Promise.all([
+    const [total, items] = await Promise.all([
       prisma.leave.count({ where }),
       prisma.leave.findMany({
         where,
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              username: true,
-            },
-          },
-          type: true,
-          approver: {
-            select: {
-              id: true,
-              name: true,
-              username: true,
-            },
-          },
-        },
         skip: (page - 1) * limit,
         take: limit,
-        orderBy: { createdAt: "desc" },
+        include: {
+          user: true,
+          approver: true,
+          type: true,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
       }),
     ]);
 
-    return NextResponse.json({
-      code: 200,
-      message: "success",
-      data: {
-        items: leaves,
-        total,
-        page,
-        limit,
-      },
+    return createResponse({
+      items,
+      total,
+      page,
+      limit,
     });
   } catch (error) {
-    console.error("获取假期申请列表失败:", error);
-    return NextResponse.json(
-      { code: 500, message: "获取假期申请列表失败", data: null },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 }
 
-// 创建假期申请
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session) {
-      return NextResponse.json(
-        { code: 401, message: "未授权", data: null },
-        { status: 401 }
-      );
+    const data = await parseRequest(request, leaveSchema);
+
+    // 检查时间是否合法
+    if (data.startDate >= data.endDate) {
+      return createErrorResponse("开始时间必须早于结束时间");
     }
 
-    const data = await request.json();
-    const { typeId, startDate, endDate, days, reason } = data;
-
-    // 检查假期类型是否存在
-    const type = await prisma.leaveType.findUnique({
-      where: { id: typeId },
-    });
-
-    if (!type) {
-      return NextResponse.json(
-        { code: 400, message: "假期类型不存在", data: null },
-        { status: 400 }
-      );
-    }
-
-    // 检查用户是否还有足够的假期
-    const year = new Date(startDate).getFullYear();
-    const usedDays = await prisma.leave.aggregate({
+    // 检查是否有重叠的请假记录
+    const overlappingLeave = await prisma.leave.findFirst({
       where: {
-        userId: parseInt(session.user.id),
-        typeId,
-        status: 1, // 已批准的假期
-        startDate: {
-          gte: new Date(year, 0, 1),
-          lt: new Date(year + 1, 0, 1),
-        },
-      },
-      _sum: {
-        days: true,
+        userId: data.userId,
+        status: { not: 2 }, // 2 表示已拒绝
+        OR: [
+          {
+            startDate: { lte: data.startDate },
+            endDate: { gt: data.startDate },
+          },
+          {
+            startDate: { lt: data.endDate },
+            endDate: { gte: data.endDate },
+          },
+        ],
       },
     });
 
-    const remainingDays = type.days - (usedDays._sum.days || 0);
-    if (remainingDays < days) {
-      return NextResponse.json(
-        { code: 400, message: "剩余假期天数不足", data: null },
-        { status: 400 }
-      );
+    if (overlappingLeave) {
+      return createErrorResponse("该时间段内已有请假记录");
     }
 
+    // 创建请假记录
     const leave = await prisma.leave.create({
       data: {
-        userId: parseInt(session.user.id),
-        typeId,
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-        days,
-        reason,
-        status: 0, // 待审批
+        userId: data.userId,
+        typeId: data.typeId,
+        startDate: data.startDate,
+        endDate: data.endDate,
+        days: data.days,
+        reason: data.reason,
+        status: data.status,
       },
       include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            username: true,
-          },
-        },
+        user: true,
+        approver: true,
         type: true,
       },
     });
 
-    return NextResponse.json({
-      code: 200,
-      message: "success",
-      data: leave,
-    });
+    return createResponse(leave);
   } catch (error) {
-    console.error("创建假期申请失败:", error);
-    return NextResponse.json(
-      { code: 500, message: "创建假期申请失败", data: null },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 }
 
-// 更新假期申请（审批）
-export async function PUT(request: Request) {
+export async function PUT(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session) {
-      return NextResponse.json(
-        { code: 401, message: "未授权", data: null },
-        { status: 401 }
-      );
+    const data = await parseRequest(request, leaveSchema);
+
+    if (!data.id) {
+      return createErrorResponse("请假记录ID不能为空");
     }
 
-    const data = await request.json();
-    const { id, status, comment } = data;
+    // 检查请假记录是否存在
+    const existingLeave = await prisma.leave.findUnique({
+      where: { id: data.id },
+    });
 
+    if (!existingLeave) {
+      return createErrorResponse("请假记录不存在");
+    }
+
+    // 检查是否可以修改
+    if (existingLeave.status !== 0) { // 0 表示待审批
+      return createErrorResponse("已审批的请假记录不能修改");
+    }
+
+    // 检查时间是否合法
+    if (data.startDate >= data.endDate) {
+      return createErrorResponse("开始时间必须早于结束时间");
+    }
+
+    // 检查是否有重叠的请假记录
+    const overlappingLeave = await prisma.leave.findFirst({
+      where: {
+        userId: data.userId,
+        id: { not: data.id },
+        status: { not: 2 }, // 2 表示已拒绝
+        OR: [
+          {
+            startDate: { lte: data.startDate },
+            endDate: { gt: data.startDate },
+          },
+          {
+            startDate: { lt: data.endDate },
+            endDate: { gte: data.endDate },
+          },
+        ],
+      },
+    });
+
+    if (overlappingLeave) {
+      return createErrorResponse("该时间段内已有请假记录");
+    }
+
+    // 更新请假记录
     const leave = await prisma.leave.update({
-      where: { id },
+      where: { id: data.id },
       data: {
-        status,
-        approvedBy: parseInt(session.user.id),
-        approvedAt: new Date(),
-        comment,
+        typeId: data.typeId,
+        startDate: data.startDate,
+        endDate: data.endDate,
+        days: data.days,
+        reason: data.reason,
+        status: data.status,
+        approvedBy: data.approvedBy,
+        approvedAt: data.approvedAt,
+        comment: data.comment,
       },
       include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            username: true,
-          },
-        },
+        user: true,
+        approver: true,
         type: true,
-        approver: {
-          select: {
-            id: true,
-            name: true,
-            username: true,
-          },
-        },
       },
     });
 
-    return NextResponse.json({
-      code: 200,
-      message: "success",
-      data: leave,
-    });
+    return createResponse(leave);
   } catch (error) {
-    console.error("更新假期申请失败:", error);
-    return NextResponse.json(
-      { code: 500, message: "更新假期申请失败", data: null },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 }
 
-// 删除假期申请
-export async function DELETE(request: Request) {
+export async function DELETE(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session) {
-      return NextResponse.json(
-        { code: 401, message: "未授权", data: null },
-        { status: 401 }
-      );
-    }
+    const { id } = await parseRequest(request, z.object({
+      id: z.string().transform(val => parseInt(val)),
+    }));
 
-    const { searchParams } = new URL(request.url);
-    const id = parseInt(searchParams.get("id") || "0");
-
-    if (!id) {
-      return NextResponse.json(
-        { code: 400, message: "假期申请ID不能为空", data: null },
-        { status: 400 }
-      );
-    }
-
-    // 检查是否是自己的申请
+    // 检查请假记录是否存在
     const leave = await prisma.leave.findUnique({
       where: { id },
     });
 
     if (!leave) {
-      return NextResponse.json(
-        { code: 404, message: "假期申请不存在", data: null },
-        { status: 404 }
-      );
+      return createErrorResponse("请假记录不存在");
     }
 
-    if (leave.userId !== parseInt(session.user.id)) {
-      return NextResponse.json(
-        { code: 403, message: "无权删除他人的假期申请", data: null },
-        { status: 403 }
-      );
+    // 检查是否可以删除
+    if (leave.status !== 0) { // 0 表示待审批
+      return createErrorResponse("已审批的请假记录不能删除");
     }
 
-    // 只能删除待审批的申请
-    if (leave.status !== 0) {
-      return NextResponse.json(
-        { code: 400, message: "只能删除待审批的假期申请", data: null },
-        { status: 400 }
-      );
-    }
-
+    // 删除请假记录
     await prisma.leave.delete({
       where: { id },
     });
 
-    return NextResponse.json({
-      code: 200,
-      message: "success",
-      data: null,
-    });
+    return createResponse(null, "请假记录删除成功");
   } catch (error) {
-    console.error("删除假期申请失败:", error);
-    return NextResponse.json(
-      { code: 500, message: "删除假期申请失败", data: null },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 } 
