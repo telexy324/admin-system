@@ -31,6 +31,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Pagination } from '@/components/ui/pagination';
 
 // 权限表单验证模式
 const permissionFormSchema = z.object({
@@ -60,6 +62,8 @@ async function fetchPermissions() {
 }
 
 export default function PermissionsPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -67,10 +71,23 @@ export default function PermissionsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const currentPage = parseInt(searchParams.get('page') || '1');
+  const pageLimit = parseInt(searchParams.get('limit') || '10');
+  const searchQuery = searchParams.get('search') || '';
+
   // 获取权限列表
   const { data, isLoading, error } = useQuery({
-    queryKey: ["permissions", page, search],
-    queryFn: fetchPermissions,
+    queryKey: ["permissions", currentPage, pageLimit, searchQuery],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/permissions?page=${currentPage}&limit=${pageLimit}&search=${searchQuery}`
+      );
+      const data = await response.json();
+      if (data.code === 200) {
+        return data.data;
+      }
+      throw new Error(data.message);
+    },
   });
 
   // 表单处理
@@ -281,7 +298,7 @@ export default function PermissionsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data?.permissions?.map((permission: any) => (
+            {data?.items?.map((permission: any) => (
               <TableRow key={permission.id}>
                 <TableCell>{permission.name}</TableCell>
                 <TableCell>{permission.description}</TableCell>
@@ -310,28 +327,8 @@ export default function PermissionsPage() {
         </Table>
       </div>
 
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-gray-500">
-          共 {data?.total || 0} 条记录
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage(page - 1)}
-            disabled={page === 1}
-          >
-            上一页
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage(page + 1)}
-            disabled={!data?.hasMore}
-          >
-            下一页
-          </Button>
-        </div>
+      <div className="mt-4">
+        <Pagination total={data?.total || 0} page={currentPage} limit={pageLimit} />
       </div>
     </div>
   );

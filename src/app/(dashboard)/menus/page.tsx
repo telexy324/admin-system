@@ -23,6 +23,9 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Label } from "@/components/ui/label";
+import { useToast } from "@/components/ui/use-toast";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Pagination } from '@/components/ui/pagination';
 
 // 菜单表单验证模式
 const menuFormSchema = z.object({
@@ -52,15 +55,32 @@ async function fetchMenus() {
 }
 
 export default function MenusPage() {
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { toast } = useToast();
+
+  const currentPage = parseInt(searchParams.get('page') || '1');
+  const pageLimit = parseInt(searchParams.get('limit') || '10');
+  const searchQuery = searchParams.get('search') || '';
+
+  const [page, setPage] = useState(currentPage);
+  const [search, setSearch] = useState(searchQuery);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingMenu, setEditingMenu] = useState<MenuFormValues | null>(null);
 
   // 获取菜单列表
   const { data, isLoading, error } = useQuery({
-    queryKey: ["menus", page, search],
-    queryFn: fetchMenus,
+    queryKey: ["menus", currentPage, pageLimit, searchQuery],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/menus?page=${currentPage}&limit=${pageLimit}&search=${searchQuery}`
+      );
+      const data = await response.json();
+      if (data.code === 200) {
+        return data.data;
+      }
+      throw new Error(data.message);
+    },
   });
 
   // 表单处理
@@ -110,22 +130,34 @@ export default function MenusPage() {
 
   // 处理删除菜单
   const handleDelete = async (id: number) => {
-    if (!confirm("确定要删除这个菜单吗？")) {
-      return;
-    }
+    if (!confirm('确定要删除该菜单吗？')) return;
 
     try {
-      const response = await fetch(`/api/menus/${id}`, {
-        method: "DELETE",
+      const response = await fetch(`/api/menus?id=${id}`, {
+        method: 'DELETE',
       });
+      const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error("删除菜单失败");
+      if (data.code === 200) {
+        toast({
+          title: '删除成功',
+          description: '菜单已成功删除',
+        });
+        // 重新获取菜单列表
+        router.refresh();
+      } else {
+        toast({
+          title: '删除失败',
+          description: data.message,
+          variant: 'destructive',
+        });
       }
-
-      // TODO: 刷新菜单列表
     } catch (error) {
-      console.error("删除菜单失败:", error);
+      toast({
+        title: '删除失败',
+        description: '请稍后重试',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -241,12 +273,12 @@ export default function MenusPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data?.menus?.map((menu: any) => (
+            {data?.items.map((menu: any) => (
               <TableRow key={menu.id}>
                 <TableCell>{menu.name}</TableCell>
                 <TableCell>{menu.path}</TableCell>
                 <TableCell>{menu.icon}</TableCell>
-                <TableCell>{menu.order}</TableCell>
+                <TableCell>{menu.sort}</TableCell>
                 <TableCell>
                   {new Date(menu.createdAt).toLocaleString()}
                 </TableCell>
@@ -261,7 +293,7 @@ export default function MenusPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-red-500"
+                    className="text-red-600 hover:text-red-700"
                     onClick={() => handleDelete(menu.id)}
                   >
                     删除
@@ -273,28 +305,8 @@ export default function MenusPage() {
         </Table>
       </div>
 
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-gray-500">
-          共 {data?.total || 0} 条记录
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage(page - 1)}
-            disabled={page === 1}
-          >
-            上一页
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage(page + 1)}
-            disabled={!data?.hasMore}
-          >
-            下一页
-          </Button>
-        </div>
+      <div className="mt-4">
+        <Pagination total={data?.total || 0} page={currentPage} limit={pageLimit} />
       </div>
     </div>
   );

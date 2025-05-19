@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Pagination } from '@/components/ui/pagination';
 
 // 用户表单验证模式
 const userFormSchema = z.object({
@@ -70,6 +72,10 @@ export default function UsersPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedRoles, setSelectedRoles] = useState<number[]>([]);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const limit = parseInt(searchParams.get('limit') || '10');
 
   // 获取用户列表
   const { data, isLoading, error } = useQuery({
@@ -363,28 +369,8 @@ export default function UsersPage() {
         </Table>
       </div>
 
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-gray-500">
-          共 {data?.total || 0} 条记录
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage(page - 1)}
-            disabled={page === 1}
-          >
-            上一页
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage(page + 1)}
-            disabled={!data?.hasMore}
-          >
-            下一页
-          </Button>
-        </div>
+      <div className="mt-4">
+        <Pagination total={data?.total || 0} page={page} limit={limit} />
       </div>
     </div>
   );

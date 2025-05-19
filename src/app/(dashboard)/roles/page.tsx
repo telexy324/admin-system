@@ -26,6 +26,9 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
+import { useToast } from '@/components/ui/use-toast';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Pagination } from '@/components/ui/pagination';
 
 // 角色表单验证模式
 const roleFormSchema = z.object({
@@ -54,32 +57,33 @@ async function fetchPermissions() {
   return data.data?.items || [];
 }
 
-// 模拟获取角色列表
-async function fetchRoles() {
-  const response = await fetch("/api/roles");
-  if (!response.ok) {
-    throw new Error("获取角色列表失败");
-  }
-  const data = await response.json();
-  return {
-    roles: data.data?.items || [],
-    total: data.data?.total || 0,
-    hasMore: data.data?.hasMore || false,
-  };
-}
-
 export default function RolesPage() {
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { toast } = useToast();
+
+  const currentPage = parseInt(searchParams.get('page') || '1');
+  const pageLimit = parseInt(searchParams.get('limit') || '10');
+  const searchQuery = searchParams.get('search') || '';
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<RoleFormValues | null>(null);
   const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
   const [selectedPermissions, setSelectedPermissions] = useState<number[]>([]);
 
   // 获取角色列表
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["roles", page, search],
-    queryFn: fetchRoles,
+  const { data, isLoading } = useQuery({
+    queryKey: ["roles", currentPage, pageLimit, searchQuery],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/roles?page=${currentPage}&limit=${pageLimit}&search=${searchQuery}`
+      );
+      const data = await response.json();
+      if (data.code === 200) {
+        return data.data;
+      }
+      throw new Error(data.message);
+    },
   });
 
   const usersQuery = useQuery({
@@ -141,27 +145,38 @@ export default function RolesPage() {
 
   // 处理删除角色
   const handleDelete = async (id: number) => {
-    if (!confirm("确定要删除这个角色吗？")) {
-      return;
-    }
+    if (!confirm('确定要删除该角色吗？')) return;
 
     try {
-      const response = await fetch(`/api/roles/${id}`, {
-        method: "DELETE",
+      const response = await fetch(`/api/roles?id=${id}`, {
+        method: 'DELETE',
       });
+      const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error("删除角色失败");
+      if (data.code === 200) {
+        toast({
+          title: '删除成功',
+          description: '角色已成功删除',
+        });
+        // 重新获取角色列表
+        router.refresh();
+      } else {
+        toast({
+          title: '删除失败',
+          description: data.message,
+          variant: 'destructive',
+        });
       }
-
-      // TODO: 刷新角色列表
     } catch (error) {
-      console.error("删除角色失败:", error);
+      toast({
+        title: '删除失败',
+        description: '请稍后重试',
+        variant: 'destructive',
+      });
     }
   };
 
   if (isLoading) return <div>加载中...</div>;
-  if (error) return <div>加载失败</div>;
 
   return (
     <div className="space-y-6">
@@ -312,8 +327,12 @@ export default function RolesPage() {
       <div className="flex items-center gap-4">
         <Input
           placeholder="搜索角色..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          value={searchQuery}
+          onChange={(e) => {
+            const params = new URLSearchParams(searchParams);
+            params.set('search', e.target.value);
+            router.push(`?${params.toString()}`);
+          }}
           className="max-w-sm"
         />
       </div>
@@ -330,7 +349,7 @@ export default function RolesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data?.roles?.map((role: any) => (
+            {data?.items.map((role: any) => (
               <TableRow key={role.id}>
                 <TableCell>{role.name}</TableCell>
                 <TableCell>{role.description}</TableCell>
@@ -355,7 +374,7 @@ export default function RolesPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-red-500"
+                    className="text-red-600 hover:text-red-700"
                     onClick={() => handleDelete(role.id)}
                   >
                     删除
@@ -367,28 +386,8 @@ export default function RolesPage() {
         </Table>
       </div>
 
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-gray-500">
-          共 {data?.total || 0} 条记录
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage(page - 1)}
-            disabled={page === 1}
-          >
-            上一页
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage(page + 1)}
-            disabled={!data?.hasMore}
-          >
-            下一页
-          </Button>
-        </div>
+      <div className="mt-4">
+        <Pagination total={data?.total || 0} page={currentPage} limit={pageLimit} />
       </div>
     </div>
   );
