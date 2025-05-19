@@ -11,6 +11,8 @@ import {
   Settings,
   LogOut,
   KeyRound,
+  UserCog,
+  Calendar,
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -30,17 +32,22 @@ const menuItems = [
   {
     title: '角色管理',
     href: '/roles',
-    icon: Shield,
+    icon: UserCog,
   },
   {
     title: '权限管理',
     href: '/permissions',
-    icon: KeyRound,
+    icon: Shield,
   },
   {
     title: '菜单管理',
     href: '/menus',
     icon: MenuIcon,
+  },
+  {
+    title: '请假管理',
+    href: '/leaves',
+    icon: Calendar,
   },
   {
     title: '系统设置',

@@ -1,6 +1,9 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -9,8 +12,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/components/ui/use-toast";
 import {
   Select,
   SelectContent,
@@ -18,280 +31,287 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useToast } from "@/components/ui/use-toast";
-import { useRouter } from "next/navigation";
-import { format } from "date-fns";
-import { zhCN } from "date-fns/locale";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Pagination } from '@/components/ui/pagination';
 
-interface Leave {
-  id: number;
-  user: {
-    id: number;
-    name: string;
-    username: string;
-  };
-  type: {
-    id: number;
-    name: string;
-  };
-  startDate: string;
-  endDate: string;
-  days: number;
-  reason: string;
-  status: number;
-  approvedBy?: {
-    id: number;
-    name: string;
-  };
-  approvedAt?: string;
-  comment?: string;
-  createdAt: string;
-}
+// 请假表单验证模式
+const leaveFormSchema = z.object({
+  id: z.number().optional(),
+  type: z.enum(["事假", "病假", "年假", "调休"], {
+    required_error: "请选择请假类型",
+  }),
+  startDate: z.string().min(1, "请选择开始日期"),
+  endDate: z.string().min(1, "请选择结束日期"),
+  reason: z.string().min(2, "请假原因至少2个字符"),
+  status: z.enum(["待审批", "已批准", "已拒绝"]).optional(),
+});
 
-export default function LeavesPage() {
-  const [leaves, setLeaves] = useState<Leave[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [limit] = useState(10);
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<string>("");
-  const [loading, setLoading] = useState(false);
-  const { toast } = useToast();
+type LeaveFormValues = z.infer<typeof leaveFormSchema>;
+
+export default function LeavePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { toast } = useToast();
 
-  const fetchLeaves = async () => {
-    try {
-      setLoading(true);
-      const params = new URLSearchParams({
-        page: page.toString(),
-        limit: limit.toString(),
-        ...(search && { search }),
-        ...(status && { status }),
-      });
+  const currentPage = parseInt(searchParams.get('page') || '1');
+  const pageLimit = parseInt(searchParams.get('limit') || '10');
+  const searchQuery = searchParams.get('search') || '';
 
-      const response = await fetch(`/api/leaves?${params}`);
-      const result = await response.json();
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingLeave, setEditingLeave] = useState<LeaveFormValues | null>(null);
 
-      if (result.code === 200) {
-        setLeaves(result.data.items);
-        setTotal(result.data.total);
-      } else {
-        toast({
-          title: "获取数据失败",
-          description: result.message,
-          variant: "destructive",
-        });
+  // 获取请假列表
+  const { data, isLoading } = useQuery({
+    queryKey: ["leaves", currentPage, pageLimit, searchQuery],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/leaves?page=${currentPage}&limit=${pageLimit}&search=${searchQuery}`
+      );
+      const data = await response.json();
+      if (data.code === 200) {
+        return data.data;
       }
-    } catch (error) {
-      toast({
-        title: "获取数据失败",
-        description: "请稍后重试",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+      throw new Error(data.message);
+    },
+  });
 
-  useEffect(() => {
-    fetchLeaves();
-  }, [page, search, status]);
+  // 表单处理
+  const form = useForm<LeaveFormValues>({
+    resolver: zodResolver(leaveFormSchema),
+    defaultValues: {
+      type: "事假",
+      startDate: "",
+      endDate: "",
+      reason: "",
+      status: "待审批",
+    },
+  });
 
-  const handleApprove = async (id: number, status: number) => {
+  // 处理表单提交
+  const onSubmit = async (values: LeaveFormValues) => {
     try {
-      const response = await fetch(`/api/leaves`, {
-        method: "PUT",
+      const url = values.id ? `/api/leaves/${values.id}` : "/api/leaves";
+      const method = values.id ? "PUT" : "POST";
+      const response = await fetch(url, {
+        method,
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          id,
-          status,
-          comment: status === 1 ? "已批准" : "已拒绝",
-        }),
+        body: JSON.stringify(values),
       });
 
-      const result = await response.json();
-
-      if (result.code === 200) {
-        toast({
-          title: "操作成功",
-          description: status === 1 ? "已批准假期申请" : "已拒绝假期申请",
-        });
-        fetchLeaves();
-      } else {
-        toast({
-          title: "操作失败",
-          description: result.message,
-          variant: "destructive",
-        });
+      if (!response.ok) {
+        throw new Error("保存请假申请失败");
       }
+
+      toast({
+        title: "成功",
+        description: values.id ? "请假申请更新成功" : "请假申请提交成功",
+      });
+
+      setIsDialogOpen(false);
+      form.reset();
+      router.refresh();
     } catch (error) {
       toast({
-        title: "操作失败",
-        description: "请稍后重试",
+        title: "错误",
+        description: "保存请假申请失败",
         variant: "destructive",
       });
     }
   };
 
+  // 处理编辑请假
+  const handleEdit = (leave: any) => {
+    setEditingLeave(leave);
+    form.reset(leave);
+    setIsDialogOpen(true);
+  };
+
+  // 处理删除请假
   const handleDelete = async (id: number) => {
-    if (!confirm("确定要删除这条假期申请吗？")) {
+    if (!confirm("确定要删除这个请假申请吗？")) {
       return;
     }
 
     try {
-      const response = await fetch(`/api/leaves?id=${id}`, {
+      const response = await fetch(`/api/leaves/${id}`, {
         method: "DELETE",
       });
 
-      const result = await response.json();
-
-      if (result.code === 200) {
-        toast({
-          title: "删除成功",
-          description: "假期申请已删除",
-        });
-        fetchLeaves();
-      } else {
-        toast({
-          title: "删除失败",
-          description: result.message,
-          variant: "destructive",
-        });
+      if (!response.ok) {
+        throw new Error("删除请假申请失败");
       }
+
+      toast({
+        title: "成功",
+        description: "请假申请删除成功",
+      });
+
+      router.refresh();
     } catch (error) {
       toast({
-        title: "删除失败",
-        description: "请稍后重试",
+        title: "错误",
+        description: "删除请假申请失败",
         variant: "destructive",
       });
     }
   };
 
-  const getStatusText = (status: number) => {
-    switch (status) {
-      case 0:
-        return "待审批";
-      case 1:
-        return "已批准";
-      case 2:
-        return "已拒绝";
-      default:
-        return "未知状态";
-    }
-  };
-
-  const getStatusColor = (status: number) => {
-    switch (status) {
-      case 0:
-        return "text-yellow-600";
-      case 1:
-        return "text-green-600";
-      case 2:
-        return "text-red-600";
-      default:
-        return "text-gray-600";
-    }
-  };
+  if (isLoading) return <div>加载中...</div>;
 
   return (
-    <div className="container mx-auto py-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">假期申请管理</h1>
-        <Button onClick={() => router.push("/leaves/new")}>新建申请</Button>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold">请假管理</h1>
+        <Dialog open={isDialogOpen} onOpenChange={(open) => {
+          setIsDialogOpen(open);
+          if (!open) {
+            setEditingLeave(null);
+            form.reset();
+          }
+        }}>
+          <DialogTrigger asChild>
+            <Button>申请请假</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {editingLeave ? "编辑请假申请" : "申请请假"}
+              </DialogTitle>
+            </DialogHeader>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="type">请假类型</Label>
+                <Select
+                  onValueChange={(value) => form.setValue("type", value as any)}
+                  defaultValue={form.getValues("type")}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="选择请假类型" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="事假">事假</SelectItem>
+                    <SelectItem value="病假">病假</SelectItem>
+                    <SelectItem value="年假">年假</SelectItem>
+                    <SelectItem value="调休">调休</SelectItem>
+                  </SelectContent>
+                </Select>
+                {form.formState.errors.type && (
+                  <p className="text-sm text-red-500">
+                    {form.formState.errors.type.message}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="startDate">开始日期</Label>
+                <Input
+                  id="startDate"
+                  type="date"
+                  {...form.register("startDate")}
+                />
+                {form.formState.errors.startDate && (
+                  <p className="text-sm text-red-500">
+                    {form.formState.errors.startDate.message}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="endDate">结束日期</Label>
+                <Input
+                  id="endDate"
+                  type="date"
+                  {...form.register("endDate")}
+                />
+                {form.formState.errors.endDate && (
+                  <p className="text-sm text-red-500">
+                    {form.formState.errors.endDate.message}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="reason">请假原因</Label>
+                <Input
+                  id="reason"
+                  {...form.register("reason")}
+                  placeholder="请输入请假原因"
+                />
+                {form.formState.errors.reason && (
+                  <p className="text-sm text-red-500">
+                    {form.formState.errors.reason.message}
+                  </p>
+                )}
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setIsDialogOpen(false);
+                    form.reset();
+                    setEditingLeave(null);
+                  }}
+                >
+                  取消
+                </Button>
+                <Button type="submit">提交</Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      <div className="flex gap-4 mb-6">
+      <div className="flex items-center gap-4">
         <Input
-          placeholder="搜索申请人或原因"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          placeholder="搜索请假记录..."
+          value={searchQuery}
+          onChange={(e) => {
+            const params = new URLSearchParams(searchParams);
+            params.set('search', e.target.value);
+            router.push(`?${params.toString()}`);
+          }}
           className="max-w-sm"
         />
-        <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="选择状态" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="">全部状态</SelectItem>
-            <SelectItem value="0">待审批</SelectItem>
-            <SelectItem value="1">已批准</SelectItem>
-            <SelectItem value="2">已拒绝</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
       <div className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>申请人</TableHead>
-              <TableHead>假期类型</TableHead>
+              <TableHead>请假类型</TableHead>
               <TableHead>开始日期</TableHead>
               <TableHead>结束日期</TableHead>
-              <TableHead>天数</TableHead>
-              <TableHead>原因</TableHead>
+              <TableHead>请假原因</TableHead>
               <TableHead>状态</TableHead>
-              <TableHead>审批人</TableHead>
-              <TableHead>审批时间</TableHead>
-              <TableHead>操作</TableHead>
+              <TableHead>申请人</TableHead>
+              <TableHead className="text-right">操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {leaves.map((leave) => (
+            {data?.items?.map((leave: any) => (
               <TableRow key={leave.id}>
-                <TableCell>{leave.user.name}</TableCell>
-                <TableCell>{leave.type.name}</TableCell>
-                <TableCell>
-                  {format(new Date(leave.startDate), "yyyy-MM-dd", {
-                    locale: zhCN,
-                  })}
-                </TableCell>
-                <TableCell>
-                  {format(new Date(leave.endDate), "yyyy-MM-dd", {
-                    locale: zhCN,
-                  })}
-                </TableCell>
-                <TableCell>{leave.days}</TableCell>
+                <TableCell>{leave.type}</TableCell>
+                <TableCell>{new Date(leave.startDate).toLocaleDateString()}</TableCell>
+                <TableCell>{new Date(leave.endDate).toLocaleDateString()}</TableCell>
                 <TableCell>{leave.reason}</TableCell>
-                <TableCell className={getStatusColor(leave.status)}>
-                  {getStatusText(leave.status)}
-                </TableCell>
-                <TableCell>{leave.approvedBy?.name || "-"}</TableCell>
-                <TableCell>
-                  {leave.approvedAt
-                    ? format(new Date(leave.approvedAt), "yyyy-MM-dd HH:mm", {
-                        locale: zhCN,
-                      })
-                    : "-"}
-                </TableCell>
-                <TableCell>
-                  {leave.status === 0 && (
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleApprove(leave.id, 1)}
-                      >
-                        批准
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleApprove(leave.id, 2)}
-                      >
-                        拒绝
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => handleDelete(leave.id)}
-                      >
-                        删除
-                      </Button>
-                    </div>
-                  )}
+                <TableCell>{leave.status}</TableCell>
+                <TableCell>{leave.user?.name}</TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleEdit(leave)}
+                  >
+                    编辑
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-600 hover:text-red-700"
+                    onClick={() => handleDelete(leave.id)}
+                  >
+                    删除
+                  </Button>
                 </TableCell>
               </TableRow>
             ))}
@@ -299,26 +319,8 @@ export default function LeavesPage() {
         </Table>
       </div>
 
-      <div className="flex justify-between items-center mt-4">
-        <div className="text-sm text-gray-500">
-          共 {total} 条记录，当前第 {page} 页
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setPage(page - 1)}
-            disabled={page === 1}
-          >
-            上一页
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => setPage(page + 1)}
-            disabled={page * limit >= total}
-          >
-            下一页
-          </Button>
-        </div>
+      <div className="mt-4">
+        <Pagination total={data?.total || 0} page={currentPage} limit={pageLimit} />
       </div>
     </div>
   );
