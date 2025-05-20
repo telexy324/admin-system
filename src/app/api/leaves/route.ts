@@ -1,62 +1,48 @@
 import { NextRequest } from 'next/server';
-import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { parseRequest, createResponse, createErrorResponse, handleApiError, paginationSchema } from '@/lib/api-utils';
-import { idParamsSchema, LeaveDto, RequestStatus } from "@/types/dtos";
+import { parseRequest, createResponse, createErrorResponse, handleApiError } from '@/lib/api-utils';
+import { idParamsSchema, LeaveDto, LeaveQueryDto, RequestStatus } from "@/types/dtos";
 import { isAfter } from 'date-fns';
 import { auth } from "@/auth";
 import { parseDateTimeString } from "@/lib/utils";
-
-// 请假创建/更新验证模式
-// const leaveSchema = z.object({
-//   id: z.number().optional(),
-//   userId: z.number(),
-//   typeId: z.number(),
-//   startDate: z.string().transform(str => new Date(str)),
-//   endDate: z.string().transform(str => new Date(str)),
-//   days: z.number(),
-//   reason: z.string().min(2, "请假原因至少2个字符"),
-//   status: z.number().default(0),
-//   approvedBy: z.number().optional(),
-//   approvedAt: z.string().transform(str => new Date(str)).optional(),
-//   comment: z.string().optional(),
-// });
+import { Prisma } from '@prisma/client'
+import { paginate } from "@/lib/pagination";
 
 export async function GET(request: NextRequest) {
   try {
-    const { page, limit, search } = await parseRequest(request, paginationSchema);
+    const { type, status, startDate, endDate, page, pageSize } = await parseRequest(request, LeaveQueryDto);
 
-    const where = search ? {
-      OR: [
-        { reason: { contains: search } },
-        { user: { name: { contains: search } } },
-        { user: { username: { contains: search } } },
-      ],
-    } : {};
+    const where: Prisma.LeaveWhereInput = {}
 
-    const [total, items] = await Promise.all([
-      prisma.leave.count({ where }),
-      prisma.leave.findMany({
-        where,
-        skip: (page - 1) * limit,
-        take: limit,
-        include: {
-          user: true,
-          approver: true,
-          type: true,
+    if (type) {
+      where.type = type
+    }
+
+    if (status) {
+      where.status = status
+    }
+
+    if (startDate && endDate) {
+      where.NOT = [
+        {
+          endDate: {
+            lt: new Date(startDate),
+          },
         },
-        orderBy: {
-          createdAt: 'desc',
+        {
+          startDate: {
+            gt: new Date(endDate),
+          },
         },
-      }),
-    ]);
+      ]
+    }
 
-    return createResponse({
-      items,
-      total,
+    return paginate(prisma.leave, {
+      where,
+      orderBy: { updatedAt: 'desc' },
       page,
-      limit,
-    });
+      pageSize,
+    })
   } catch (error) {
     return handleApiError(error);
   }
