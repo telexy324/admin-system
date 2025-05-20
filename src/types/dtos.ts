@@ -133,3 +133,14 @@ export enum LeaveBalanceAction {
   REQUEST = 1,
   CANCEL,
 }
+
+export interface Pagination<T>{
+  items?: T[];
+  meta?: {
+    itemCount?: number;
+    totalItems?: number;
+    itemsPerPage?: number;
+    totalPages?: number;
+    currentPage?: number;
+  };
+}

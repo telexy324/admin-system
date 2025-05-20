@@ -200,11 +200,13 @@ export async function PUT(request: NextRequest, context: { params: { id: string 
   }
 }
 
-export async function DELETE(request: NextRequest) {
+export async function DELETE(request: NextRequest, context: { params: { id: string } }) {
   try {
-    const { id } = await parseRequest(request, z.object({
-      id: z.string().transform(val => parseInt(val)),
-    }));
+    const parsed = idParamsSchema.safeParse(context.params)
+    if (!parsed.success) {
+      return createErrorResponse("请假记录ID不能为空");
+    }
+    const id = parsed.data.id
 
     // 检查请假记录是否存在
     const leave = await prisma.leave.findUnique({
@@ -216,7 +218,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // 检查是否可以删除
-    if (leave.status !== 0) { // 0 表示待审批
+    if (leave.status !== RequestStatus.PENDING) { // 0 表示待审批
       return createErrorResponse("已审批的请假记录不能删除");
     }
 
@@ -225,7 +227,7 @@ export async function DELETE(request: NextRequest) {
       where: { id },
     });
 
-    return createResponse(null, "请假记录删除成功");
+    return createResponse();
   } catch (error) {
     return handleApiError(error);
   }
