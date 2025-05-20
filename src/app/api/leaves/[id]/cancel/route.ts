@@ -20,6 +20,9 @@ export async function PUT(request: NextRequest, context: { params: { id: string 
     // 检查请假记录是否存在
     const existingLeave = await prisma.leave.findUnique({
       where: { id },
+      include: {
+        user: true,
+      }
     });
     if (!existingLeave) {
       return createErrorResponse("请假记录不存在");
@@ -28,34 +31,16 @@ export async function PUT(request: NextRequest, context: { params: { id: string 
     if (existingLeave.status !== RequestStatus.PENDING) {
       return createErrorResponse("已审批的请假记录不能修改");
     }
+
+    if (existingLeave.user.id !== userId) {
+      return createErrorResponse("不是本人的申请");
+    }
     // 更新请假记录
-    const leave = await prisma.leave.update({
+    await prisma.leave.update({
       where: { id },
       data: {
-        status: RequestStatus.APPROVED,
-        comment: data.comment,
-        approver: {
-          connect: { id: userId },
-        },
+        status: RequestStatus.CANCELLED,
         doneAt: new Date(),
-      },
-      include: {
-        approver: true,
-        user: true,
-      },
-    });
-
-    await prisma.leaveBalance.create({
-      data: {
-        type: leave.type,
-        amount: -leave.amount,
-        action: LeaveBalanceAction.REQUEST,
-        user: {
-          connect: { id: leave.userId },
-        },
-        leave: {
-          connect: { id: leave.id },
-        },
       },
     });
 

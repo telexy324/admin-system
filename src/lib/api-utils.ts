@@ -87,7 +87,7 @@ export const paginationSchema = z.object({
 /**
  * 创建响应对象
  */
-export function createResponse<T>(data: T, message: string = 'success', code: number = 200) {
+export function createResponse<T = undefined>(data?: T, message: string = 'success', code: number = 200) {
   return Response.json({
     code,
     message,

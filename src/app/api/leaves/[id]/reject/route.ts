@@ -29,10 +29,10 @@ export async function PUT(request: NextRequest, context: { params: { id: string 
       return createErrorResponse("已审批的请假记录不能修改");
     }
     // 更新请假记录
-    const leave = await prisma.leave.update({
+    await prisma.leave.update({
       where: { id },
       data: {
-        status: RequestStatus.APPROVED,
+        status: RequestStatus.REJECTED,
         comment: data.comment,
         approver: {
           connect: { id: userId },
@@ -42,20 +42,6 @@ export async function PUT(request: NextRequest, context: { params: { id: string 
       include: {
         approver: true,
         user: true,
-      },
-    });
-
-    await prisma.leaveBalance.create({
-      data: {
-        type: leave.type,
-        amount: -leave.amount,
-        action: LeaveBalanceAction.REQUEST,
-        user: {
-          connect: { id: leave.userId },
-        },
-        leave: {
-          connect: { id: leave.id },
-        },
       },
     });
 

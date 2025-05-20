@@ -121,3 +121,15 @@ export const LeaveBalanceQueryDto = PagerDto.extend({
   startDate: z.string().regex(dateTimePattern).optional(),
   endDate: z.string().regex(dateTimePattern).optional(),
 });
+
+export enum RequestStatus {
+  PENDING = 1,
+  APPROVED,
+  REJECTED,
+  CANCELLED,
+}
+
+export enum LeaveBalanceAction {
+  REQUEST = 1,
+  CANCEL,
+}

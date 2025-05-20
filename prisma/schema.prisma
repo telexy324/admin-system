@@ -22,6 +22,7 @@ model User {
   logs           Log[]
   roles          Role[]   @relation("UserRoles")
   files          Storage[]
+  leaveBalances  LeaveBalance[]
 
   @@map("users")
 }
@@ -81,39 +82,33 @@ model Log {
   @@map("logs")
 }
 
-model LeaveType {
-  id          Int      @id @default(autoincrement())
-  name        String   @unique
-  description String?
-  days        Int      @default(0)
-  status      Int      @default(1)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  leaves      Leave[]
-
-  @@map("leave_types")
-}
-
 model Leave {
   id         Int       @id @default(autoincrement())
-  userId     Int
-  typeId     Int
-  startDate  DateTime
-  endDate    DateTime
-  days       Float
-  reason     String
-  status     Int       @default(0)
-  approvedBy Int?
-  approvedAt DateTime?
-  comment    String?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
-  approver   User?     @relation("ApprovedLeaves", fields: [approvedBy], references: [id])
-  type       LeaveType @relation(fields: [typeId], references: [id])
+  amount     Decimal
+  /// status: 1:PENDING, 2:APPROVED, 3:REJECTED, 4:CANCELLED
+  status     Int       @default(1)
+  /// type: 1:COMPENSATE, 2:ANNUAL, 3:SICK, 4:PERSONAL, 5:OTHER
+  type       Int       @default(1)
+  startDate  DateTime? @map("start_date")
+  endDate    DateTime? @map("end_date")
+  reason     String
+  /// one-to-many: Leave has many Storage
+  proof     Storage[]
+  /// many-to-one: Leave belongs to one user
+  userId     Int
   user       User      @relation("UserLeaves", fields: [userId], references: [id])
+  /// many-to-one: Leave has one approver
+  approverId Int?
+  approver   User?      @relation("ApprovedLeaves", fields: [approverId], references: [id])
+  comment    String?
+  doneAt     DateTime? @map("done_at")
+  leaveBalances LeaveBalance[]
 
-  @@map("leaves")
+  @@map("leave")
 }
+
 
 model Storage {
   id          Int      @id @default(autoincrement())
@@ -128,6 +123,24 @@ model Storage {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   user        User?    @relation(fields: [userId], references: [id])
+  leaveId     Int?       // ✅ 可选的关联
+  leave       Leave?     @relation(fields: [leaveId], references: [id]) // ✅ 反向关联 leave.proof
 
   @@map("storages")
+}
+
+model LeaveBalance {
+  id         Int       @id @default(autoincrement())
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  type       Int       @default(1) // type: 1:COMPENSATE, 2:ANNUAL, 3:SICK, 4:PERSONAL, 5:OTHER
+  amount     Decimal   // decimal with precision 10, scale 2
+  year       Int?      @default(0) // 年度，默认 0，可为空
+  action     Int       @default(1) // action: 1:REQUEST, 2:CANCEL
+  userId     Int
+  leaveId    Int
+  user       User      @relation(fields: [userId], references: [id])
+  leave      Leave     @relation(fields: [leaveId], references: [id])
+
+  @@map("leave_balance") // 映射到原始表名
 }
