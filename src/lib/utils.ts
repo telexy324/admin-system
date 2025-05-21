@@ -22,3 +22,18 @@ export function parseDateTimeString(dateStr: string): Date {
 
   return parsed
 }
+
+export function buildSearchParams(params: Record<string, string|number>) {
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (
+      value !== undefined &&
+      value !== null &&
+      value !== '' &&
+      !(typeof value === 'number' && isNaN(value))
+    ) {
+      searchParams.set(key, String(value));
+    }
+  });
+  return searchParams;
+}

@@ -33,6 +33,8 @@ import {
 } from "@/components/ui/select";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Pagination } from '@/components/ui/pagination';
+import { buildSearchParams } from '@/lib/utils';
+import { LeaveListParams } from '@/types/dtos';
 
 // 请假表单验证模式
 const leaveFormSchema = z.object({
@@ -53,9 +55,15 @@ export default function LeavePage() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
 
-  const currentPage = parseInt(searchParams.get('page') || '1');
-  const pageLimit = parseInt(searchParams.get('limit') || '10');
-  const searchQuery = searchParams.get('search') || '';
+  const currentPage = parseInt(searchParams.get("page") || "1");
+  const pageLimit = parseInt(searchParams.get("pageSize") || "10");
+  const searchQuery = searchParams.get("search") || "";
+  const field = searchParams.get("field") || "";
+  const order = searchParams.get("order") as 'ASC' | 'DESC' | undefined;
+  const type = searchParams.get("type") ? Number(searchParams.get("type")) as 1 | 2 | 3 | 4 | 5 : undefined;
+  const status = searchParams.get("status") ? Number(searchParams.get("status")) as 1 | 2 | 3 : undefined;
+  const startDate = searchParams.get("startDate") || "";
+  const endDate = searchParams.get("endDate") || "";
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingLeave, setEditingLeave] = useState<LeaveFormValues | null>(null);
@@ -64,15 +72,28 @@ export default function LeavePage() {
   const { data, isLoading } = useQuery({
     queryKey: ["leaves", currentPage, pageLimit, searchQuery],
     queryFn: async () => {
-      const response = await fetch(
-        `/api/leaves?page=${currentPage}&limit=${pageLimit}&search=${searchQuery}`
-      );
+      const rawParams: LeaveListParams & { search?: string } = {
+        page: currentPage,
+        pageSize: pageLimit,
+        field,
+        order,
+        type,
+        status,
+        startDate,
+        endDate,
+        search: searchQuery,
+      };
+
+      const params = buildSearchParams(rawParams);
+
+      const response = await fetch(`/api/leaves?${params.toString()}`);
       const data = await response.json();
+
       if (data.code === 200) {
         return data.data;
       }
       throw new Error(data.message);
-    },
+    }
   });
 
   // 表单处理
@@ -266,8 +287,19 @@ export default function LeavePage() {
           placeholder="搜索请假记录..."
           value={searchQuery}
           onChange={(e) => {
-            const params = new URLSearchParams(searchParams);
-            params.set('search', e.target.value);
+            const newSearch = e.target.value;
+
+            // 当前参数对象
+            const rawParams = Object.fromEntries(searchParams.entries());
+
+            // 合并新的 search 值
+            const mergedParams = {
+              ...rawParams,
+              search: newSearch.trim(), // 如果为空会被过滤掉
+              page: 1, // 搜索时通常回到第一页
+            };
+
+            const params = buildSearchParams(mergedParams);
             router.push(`?${params.toString()}`);
           }}
           className="max-w-sm"
