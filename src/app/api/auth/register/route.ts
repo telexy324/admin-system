@@ -1,31 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { parseRequest, createResponse, createErrorResponse, handleApiError } from "@/lib/api-utils";
+import { RegisterDto } from "@/types/dtos";
 import bcrypt from "bcryptjs";
-import { PrismaClient } from "@prisma/client";
 import { SignJWT } from "jose";
 
-// 创建全局 Prisma 客户端实例
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
-
-const prisma = globalForPrisma.prisma ?? new PrismaClient();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
-}
-
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { email, password, username, name } = body;
-
-    // 验证必填字段
-    if (!email || !password || !username) {
-      return NextResponse.json(
-        { error: "邮箱、用户名和密码不能为空" },
-        { status: 400 }
-      );
-    }
+    const { email, password, username, name } = await parseRequest(request, RegisterDto);
 
     // 检查邮箱是否已存在
     const existingUser = await prisma.user.findUnique({
@@ -33,10 +15,7 @@ export async function POST(request: Request) {
     });
 
     if (existingUser) {
-      return NextResponse.json(
-        { error: "该邮箱已被注册" },
-        { status: 400 }
-      );
+      return createErrorResponse("该邮箱已被注册");
     }
 
     // 检查用户名是否已存在
@@ -45,10 +24,7 @@ export async function POST(request: Request) {
     });
 
     if (existingUsername) {
-      return NextResponse.json(
-        { error: "该用户名已被使用" },
-        { status: 400 }
-      );
+      return createErrorResponse("该用户名已被使用");
     }
 
     // 加密密码
@@ -60,10 +36,7 @@ export async function POST(request: Request) {
     });
 
     if (!defaultRole) {
-      return NextResponse.json(
-        { error: "系统错误：默认角色不存在" },
-        { status: 500 }
-      );
+      return createErrorResponse("系统错误：默认角色不存在", 500);
     }
 
     // 创建用户
@@ -101,7 +74,7 @@ export async function POST(request: Request) {
       .sign(new TextEncoder().encode(process.env.JWT_SECRET || "your-secret-key"));
 
     // 创建响应
-    const response = NextResponse.json({
+    const response = createResponse({
       message: "注册成功",
       user: {
         id: user.id,
@@ -127,10 +100,6 @@ export async function POST(request: Request) {
 
     return response;
   } catch (error) {
-    console.error("注册失败:", error);
-    return NextResponse.json(
-      { error: "注册失败，请稍后重试" },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 } 

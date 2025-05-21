@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 /**
@@ -59,10 +59,10 @@ export async function parseRequest<T extends z.ZodType>(
     }
 
     // 使用 Zod 验证数据
-    const validatedData = schema.parse(data);
-    return validatedData;
+    return schema.parse(data);
   } catch (error) {
     if (error instanceof z.ZodError) {
+      console.error(error);
       throw new Error(`请求参数验证失败: ${error.errors.map(e => e.message).join(', ')}`);
     }
     throw error;
@@ -88,7 +88,7 @@ export const paginationSchema = z.object({
  * 创建响应对象
  */
 export function createResponse<T = undefined>(data?: T, message: string = 'success', code: number = 200) {
-  return Response.json({
+  return NextResponse.json({
     code,
     message,
     data,
@@ -99,7 +99,7 @@ export function createResponse<T = undefined>(data?: T, message: string = 'succe
  * 创建错误响应对象
  */
 export function createErrorResponse(message: string = 'error', code: number = 400) {
-  return Response.json({
+  return NextResponse.json({
     code,
     message,
     data: null,

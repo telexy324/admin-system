@@ -1,30 +1,13 @@
-import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { NextRequest } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { parseRequest, createResponse, createErrorResponse, handleApiError } from "@/lib/api-utils";
+import { LoginDto } from "@/types/dtos";
 import { compare } from 'bcryptjs';
 import { sign } from 'jsonwebtoken';
 
-// 创建全局 Prisma 客户端实例
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
-
-const prisma = globalForPrisma.prisma ?? new PrismaClient();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
-}
-
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { email, password } = body;
-    // 验证邮箱和密码
-    if (!email || !password) {
-      return NextResponse.json(
-        { error: "邮箱和密码不能为空" },
-        { status: 400 }
-      );
-    }
+    const { email, password } = await parseRequest(request, LoginDto);
 
     // 查找用户
     const user = await prisma.user.findUnique({
@@ -40,19 +23,13 @@ export async function POST(request: Request) {
     });
 
     if (!user) {
-      return NextResponse.json(
-        { error: "用户不存在" },
-        { status: 404 }
-      );
+      return createErrorResponse("用户不存在", 404);
     }
 
     // 验证密码
     const isValidPassword = await compare(password, user.password);
     if (!isValidPassword) {
-      return NextResponse.json(
-        { error: "密码错误" },
-        { status: 401 }
-      );
+      return createErrorResponse("密码错误", 401);
     }
 
     // 生成 JWT token
@@ -67,7 +44,7 @@ export async function POST(request: Request) {
     );
 
     // 创建响应
-    const response = NextResponse.json({
+    const response = createResponse({
       user: {
         id: user.id,
         username: user.username,
@@ -93,10 +70,6 @@ export async function POST(request: Request) {
 
     return response;
   } catch (error) {
-    console.error("登录失败:", error);
-    return NextResponse.json(
-      { error: "登录失败，请稍后重试" },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 } 

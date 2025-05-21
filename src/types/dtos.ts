@@ -156,3 +156,15 @@ export type LeaveListParams = {
   endDate?: string;
   _t?: number;
 };
+
+export const LoginDto = z.object({
+  email: z.string().email('邮箱格式不正确'),
+  password: z.string().min(6, '密码至少6个字符'),
+});
+
+export const RegisterDto = z.object({
+  username: z.string().min(3, '用户名至少3个字符'),
+  email: z.string().email('邮箱格式不正确'),
+  password: z.string().min(6, '密码至少6个字符'),
+  name: z.string().optional(),
+});
