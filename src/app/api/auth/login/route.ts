@@ -58,15 +58,15 @@ export async function POST(request: NextRequest) {
     });
 
     // 设置 cookie
-    response.cookies.set({
-      name: "token",
-      value: token,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24, // 24 hours
-      path: '/',
-    });
+    // response.cookies.set({
+    //   name: "token",
+    //   value: token,
+    //   httpOnly: true,
+    //   secure: process.env.NODE_ENV === "production",
+    //   sameSite: "lax",
+    //   maxAge: 60 * 60 * 24, // 24 hours
+    //   path: '/',
+    // });
 
     return response;
   } catch (error) {

@@ -1,45 +1,43 @@
 import NextAuth from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { PrismaClient } from "@prisma/client";
-import CredentialsProvider from "next-auth/providers/credentials";
-import bcrypt from "bcryptjs";
-import { Role, Permission, Menu } from "@prisma/client";
+import { authConfig } from "@/auth.config";
 
 const prisma = new PrismaClient();
 
-declare module "next-auth" {
-  interface User {
-    id: string;
-    username: string;
-    email: string;
-    name: string;
-    avatar?: string | null;
-    status: number;
-    roles: (Role & {
-      permissions: Permission[];
-      menus: Menu[];
-    })[];
-  }
-
-  interface Session {
-    user: User;
-  }
-}
-
-declare module "next-auth/jwt" {
-  interface JWT {
-    id: string;
-    username: string;
-    email: string;
-    name: string;
-    avatar?: string | null;
-    status: number;
-    roles: (Role & {
-      permissions: Permission[];
-      menus: Menu[];
-    })[];
-  }
-}
+// declare module "next-auth" {
+//   interface User {
+//     id: string;
+//     username: string;
+//     email: string;
+//     name: string;
+//     avatar?: string | null;
+//     status: number;
+//     roles: (Role & {
+//       permissions: Permission[];
+//       menus: Menu[];
+//     })[];
+//   }
+//
+//   interface Session {
+//     user: User;
+//   }
+// }
+//
+// declare module "next-auth/jwt" {
+//   interface JWT {
+//     id: string;
+//     username: string;
+//     email: string;
+//     name: string;
+//     avatar?: string | null;
+//     status: number;
+//     roles: (Role & {
+//       permissions: Permission[];
+//       menus: Menu[];
+//     })[];
+//   }
+// }
 
 export const {
   handlers: { GET, POST },
@@ -47,65 +45,13 @@ export const {
   signIn,
   signOut,
 } = NextAuth({
-  adapter: PrismaAdapter(prisma) as any,
+  adapter: PrismaAdapter(prisma),
   session: {
     strategy: "jwt",
   },
   pages: {
     signIn: "/login",
   },
-  providers: [
-    CredentialsProvider({
-      name: "Credentials",
-      credentials: {
-        email: { label: "邮箱", type: "email" },
-        password: { label: "密码", type: "password" },
-      },
-      async authorize(credentials: Partial<Record<"email" | "password", unknown>>) {
-        if (!credentials?.email || !credentials?.password) {
-          throw new Error("邮箱和密码不能为空");
-        }
-
-        const email = credentials.email as string;
-        const password = credentials.password as string;
-
-        const user = await prisma.user.findUnique({
-          where: { email },
-          include: {
-            roles: {
-              include: {
-                permissions: true,
-                menus: true,
-              },
-            },
-          },
-        });
-
-        if (!user) {
-          throw new Error("用户不存在");
-        }
-
-        const isPasswordValid = await bcrypt.compare(
-          password,
-          user.password
-        );
-
-        if (!isPasswordValid) {
-          throw new Error("密码错误");
-        }
-
-        return {
-          id: user.id.toString(),
-          username: user.username,
-          email: user.email,
-          name: user.name,
-          avatar: user.avatar,
-          status: user.status,
-          roles: user.roles,
-        };
-      },
-    }),
-  ],
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
@@ -132,4 +78,5 @@ export const {
       return session;
     },
   },
+  ...authConfig
 }); 
