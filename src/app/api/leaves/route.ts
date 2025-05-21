@@ -37,12 +37,14 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    return paginate(prisma.leave, {
-      where,
-      orderBy: { updatedAt: 'desc' },
-      page,
-      pageSize,
-    })
+    return createResponse(
+      await paginate(prisma.leave, {
+        where,
+        orderBy: { updatedAt: 'desc' },
+        page,
+        pageSize,
+      })
+    )
   } catch (error) {
     return handleApiError(error);
   }
