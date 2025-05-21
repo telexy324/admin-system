@@ -9,7 +9,7 @@ const userSchema = z.object({
   username: z.string().min(3, "用户名至少3个字符"),
   name: z.string().min(2, "姓名至少2个字符"),
   email: z.string().email("请输入有效的邮箱地址"),
-  password: z.string().min(6, "密码至少6个字符").optional(),
+  password: z.string().min(6, "密码至少6个字符"),
   roleIds: z.array(z.number()).optional(),
 });
 
