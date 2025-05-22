@@ -213,7 +213,7 @@ export default function RolesPage() {
           <DialogTrigger asChild>
             <Button>添加角色</Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-[800px]">
             <DialogHeader>
               <DialogTitle>
                 {editingRole ? "编辑角色" : "添加角色"}
@@ -301,7 +301,7 @@ export default function RolesPage() {
                         : "请选择权限"}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-80 p-2">
+                  <PopoverContent className="w-[400px] p-2" align="start" side="right">
                     <div className="space-y-2">
                       <div className="flex items-center justify-between px-2">
                         <span className="text-sm font-medium">权限列表</span>
@@ -319,7 +319,7 @@ export default function RolesPage() {
                           {selectedPermissions.length === permissionsQuery.data?.length ? "取消全选" : "全选"}
                         </Button>
                       </div>
-                      <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-2">
+                      <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto pr-2">
                         {permissionsQuery.data?.map((permission: any) => (
                           <label key={permission.id} className="flex items-center gap-2 cursor-pointer hover:bg-accent p-2 rounded-md">
                             <Checkbox
@@ -332,7 +332,7 @@ export default function RolesPage() {
                                 );
                               }}
                             />
-                            <span className="text-sm">{permission.name}</span>
+                            <span className="text-sm truncate">{permission.name}</span>
                           </label>
                         ))}
                       </div>
