@@ -7,9 +7,11 @@ import { idParamsSchema } from "@/types/dtos";
 
 export async function GET(request: NextRequest,context: { params: { id: string } }) {
   try {
-    const parsed = idParamsSchema.safeParse(context.params)
+    const parsed = idParamsSchema.safeParse({
+      id: String(context.params.id),
+    });
     if (!parsed.success) {
-      return createErrorResponse("请假记录ID不能为空");
+      return createErrorResponse("请假记录ID不合法");
     }
     const id = parsed.data.id
     const leave = await prisma.leave.findUnique({

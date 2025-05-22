@@ -12,9 +12,11 @@ export async function PUT(request: NextRequest, context: { params: { id: string 
     if (!userId) {
       return createErrorResponse("获取用户id失败");
     }
-    const parsed = idParamsSchema.safeParse(context.params)
+    const parsed = idParamsSchema.safeParse({
+      id: String(context.params.id),
+    });
     if (!parsed.success) {
-      return createErrorResponse("请假记录ID不能为空");
+      return createErrorResponse("请假记录ID不合法");
     }
     const id = parsed.data.id
     const data = await parseRequest(request, LeaveUpdateDto);
