@@ -78,14 +78,20 @@ export const LeaveDto = z.object({
 export const LeaveUpdateDto = LeaveDto.partial();
 
 export const LeaveQueryDto = PagerDto.extend({
-  type: z.union([
-    z.literal(1),
-    z.literal(2),
-    z.literal(3),
-    z.literal(4),
-    z.literal(5),
-  ]).optional(),
-  status: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
+  type: z
+    .union([z.string(), z.number()])
+    .transform((val) => Number(val))
+    .refine((val) => [1, 2, 3, 4, 5].includes(val), {
+      message: "type 必须是 1~5 之间的数字",
+    })
+    .optional(),
+  status: z
+    .union([z.string(), z.number()])
+    .transform((val) => Number(val))
+    .refine((val) => [1, 2, 3].includes(val), {
+      message: "type 必须是 1~3 之间的数字",
+    })
+    .optional(),
   startDate: z.string().regex(dateTimePattern).optional(),
   endDate: z.string().regex(dateTimePattern).optional(),
 });
@@ -94,13 +100,13 @@ export const LeaveBalanceDto = z.object({
   amount: z
     .string()
     .regex(/^\d+(\.\d{1,2})?$/, 'amount 必须是最多两位小数的数字字符串'),
-  type: z.union([
-    z.literal(1),
-    z.literal(2),
-    z.literal(3),
-    z.literal(4),
-    z.literal(5),
-  ]),
+  type: z
+    .union([z.string(), z.number()])
+    .transform((val) => Number(val))
+    .refine((val) => [1, 2, 3, 4, 5].includes(val), {
+      message: "type 必须是 1~5 之间的数字",
+    })
+    .optional(),
   startDate: z.string().regex(dateTimePattern),
   endDate: z.string().regex(dateTimePattern),
   reason: z.string().min(8),
@@ -111,13 +117,13 @@ export const LeaveBalanceDto = z.object({
 export const LeaveBalanceUpdateDto = LeaveBalanceDto.partial();
 
 export const LeaveBalanceQueryDto = PagerDto.extend({
-  type: z.union([
-    z.literal(1),
-    z.literal(2),
-    z.literal(3),
-    z.literal(4),
-    z.literal(5),
-  ]).optional(),
+  type: z
+    .union([z.string(), z.number()])
+    .transform((val) => Number(val))
+    .refine((val) => [1, 2, 3, 4, 5].includes(val), {
+      message: "type 必须是 1~5 之间的数字",
+    })
+    .optional(),
   startDate: z.string().regex(dateTimePattern).optional(),
   endDate: z.string().regex(dateTimePattern).optional(),
 });
