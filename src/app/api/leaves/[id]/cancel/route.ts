@@ -12,8 +12,9 @@ export async function PUT(request: NextRequest, context: { params: { id: string 
     if (!userId) {
       return createErrorResponse("获取用户id失败");
     }
+    const params = await context.params;   // 这里必须 await context.params，获取真实对象
     const parsed = idParamsSchema.safeParse({
-      id: String(context.params.id),
+      id: String(params.id),
     });
     if (!parsed.success) {
       return createErrorResponse("请假记录ID不合法");
