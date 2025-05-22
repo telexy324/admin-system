@@ -291,13 +291,19 @@ export default function RolesPage() {
                     <Button
                       variant="outline"
                       className={cn(
-                        "w-full justify-start",
+                        "w-full justify-start h-auto min-h-[40px] p-2",
                         !selectedPermissions.length && "text-muted-foreground"
                       )}
                       type="button"
                     >
                       {selectedPermissions.length
-                        ? permissionsQuery.data?.filter((p: any) => selectedPermissions.includes(p.id)).map((p: any) => p.name).join("，")
+                        ? (
+                          <div className="grid grid-cols-2 gap-1 w-full text-left overflow-hidden">
+                            {permissionsQuery.data?.filter((p: any) => selectedPermissions.includes(p.id)).map((p: any) => (
+                              <span key={p.id} className="text-sm truncate">{p.name}</span>
+                            ))}
+                          </div>
+                        )
                         : "请选择权限"}
                     </Button>
                   </PopoverTrigger>
