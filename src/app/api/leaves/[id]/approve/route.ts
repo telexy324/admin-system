@@ -3,11 +3,12 @@ import { createErrorResponse, createResponse, handleApiError, parseRequest } fro
 import { prisma } from "@/lib/prisma";
 import { idParamsSchema, LeaveBalanceAction, LeaveUpdateDto, RequestStatus } from "@/types/dtos";
 import { auth } from "@/auth";
+import { getUserFromRequest } from "@/lib/auth";
 
 export async function PUT(request: NextRequest, context: { params: { id: string } }) {
   try {
-    const session = await auth();
-    const userId = session?.user?.id ? Number(session.user.id) : null
+    const currentUser = await getUserFromRequest(request);
+    const userId = currentUser?.id
     if (!userId) {
       return createErrorResponse("获取用户id失败");
     }

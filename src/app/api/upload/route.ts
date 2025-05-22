@@ -5,7 +5,8 @@ import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 import { PrismaClient } from '@prisma/client';
 import { auth } from '@/auth';
-import { authOptions } from '@/lib/auth';
+import { authOptions, getUserFromRequest } from '@/lib/auth';
+import { createErrorResponse } from "@/lib/api-utils";
 
 const prisma = new PrismaClient();
 
@@ -19,7 +20,11 @@ const supabase = process.env.STORAGE_TYPE === 'supabase'
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
+    const currentUser = await getUserFromRequest(request);
+    const userId = currentUser?.id
+    if (!userId) {
+      return createErrorResponse("获取用户id失败");
+    }
     const formData = await request.formData();
     const file = formData.get('file') as File;
     
@@ -85,7 +90,7 @@ export async function POST(request: NextRequest) {
         type: file.type,
         storageType: process.env.STORAGE_TYPE || 'local',
         bucket: bucket,
-        userId: session?.user?.id ? Number(session.user.id) : null,
+        userId,
       },
     });
 

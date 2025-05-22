@@ -7,6 +7,7 @@ import { auth } from "@/auth";
 import { parseDateTimeString } from "@/lib/utils";
 import { Prisma } from '@prisma/client'
 import { paginate } from "@/lib/pagination";
+import { getUserFromRequest } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
@@ -52,8 +53,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
-    const userId = session?.user?.id ? Number(session.user.id) : null
+    const currentUser = await getUserFromRequest(request);
+    const userId = currentUser?.id
     if (!userId) {
       return createErrorResponse("获取用户id失败");
     }
@@ -111,8 +112,8 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest, context: { params: { id: string } }) {
   try {
-    const session = await auth();
-    const userId = session?.user?.id ? Number(session.user.id) : null
+    const currentUser = await getUserFromRequest(request);
+    const userId = currentUser?.id
     if (!userId) {
       return createErrorResponse("获取用户id失败");
     }

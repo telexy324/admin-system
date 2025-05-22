@@ -4,11 +4,12 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { LeaveApprovalStats } from "@/types/nestapi";
 import { RequestStatus } from "@/types/dtos";
+import { getUserFromRequest } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
-    const userId = session?.user?.id ? Number(session.user.id) : null
+    const currentUser = await getUserFromRequest(request);
+    const userId = currentUser?.id
     if (!userId) {
       return createErrorResponse("获取用户id失败");
     }

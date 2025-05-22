@@ -4,6 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { NextAuthConfig } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
+import { getToken } from "next-auth/jwt";
+import type { NextRequest } from "next/server";
+import type { JWT } from "next-auth/jwt";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-jwt-key";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
@@ -185,4 +188,35 @@ export async function getServerSession() {
       roles: user.roles
     }
   };
-} 
+}
+
+export async function getUserFromRequest(req: NextRequest): Promise<JWT | null> {
+  const secret = process.env.NEXTAUTH_SECRET;
+  if (!secret) throw new Error("NEXTAUTH_SECRET is not set");
+
+  // 优先从 cookie 中读取 token（用于 Next.js Web）
+  const tokenFromCookie = await getToken({ req, secret });
+  if (tokenFromCookie && tokenFromCookie.id) {
+    return tokenFromCookie as JWT;
+  }
+
+  // Fallback：从 Authorization: Bearer 头部读取（用于 React Native）
+  const authHeader = req.headers.get("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.split(" ")[1];
+    try {
+      const { payload } = await jwtVerify(
+        token,
+        new TextEncoder().encode(secret)
+      );
+
+      // 返回 JWT 类型
+      return payload as JWT;
+    } catch (err) {
+      console.error("JWT 验证失败:", err);
+      return null;
+    }
+  }
+
+  return null;
+}

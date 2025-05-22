@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getToken } from "next-auth/jwt";
+import { getUserFromRequest } from "@/lib/auth";
 
 // 公开路径，不需要认证
 const publicPaths = [
@@ -20,8 +20,8 @@ const publicPaths = [
 ];
 
 export async function middleware(req: NextRequest) {
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
-  const isLoggedIn = !!token;
+  const user = await getUserFromRequest(req);
+  const isLoggedIn = !!user;
 
   const { pathname } = req.nextUrl;
 
