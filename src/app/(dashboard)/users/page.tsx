@@ -43,8 +43,8 @@ const userFormSchema = z.object({
 type UserFormValues = z.infer<typeof userFormSchema>;
 
 // 获取用户列表
-async function fetchUsers() {
-  const response = await fetch("/api/users");
+async function fetchUsers(page: number, limit: number, search: string) {
+  const response = await fetch(`/api/users?page=${page}&limit=${limit}&search=${search}`);
   if (!response.ok) {
     throw new Error("获取用户列表失败");
   }
@@ -58,29 +58,29 @@ async function fetchUsers() {
 
 // 获取所有角色
 async function fetchRoles() {
-  const response = await fetch("/api/roles?page=1&limit=1000");
+  const response = await fetch("/api/roles?page=1&limit=100");
   if (!response.ok) throw new Error("获取角色失败");
   const data = await response.json();
   return data.data?.items || [];
 }
 
 export default function UsersPage() {
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<UserFormValues | null>(null);
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const [selectedRoles, setSelectedRoles] = useState<number[]>([]);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserFormValues | null>(null);
+  const [selectedRoles, setSelectedRoles] = useState<number[]>([]);
 
-  const limit = parseInt(searchParams.get('limit') || '10');
+  const currentPage = parseInt(searchParams.get('page') || '1');
+  const pageLimit = parseInt(searchParams.get('limit') || '10');
+  const searchQuery = searchParams.get('search') || '';
 
   // 获取用户列表
   const { data, isLoading, error } = useQuery({
-    queryKey: ["users", page, search],
-    queryFn: fetchUsers,
+    queryKey: ["users", currentPage, pageLimit, searchQuery],
+    queryFn: () => fetchUsers(currentPage, pageLimit, searchQuery),
   });
 
   const rolesQuery = useQuery({
@@ -96,6 +96,7 @@ export default function UsersPage() {
       name: "",
       email: "",
       password: "",
+      roleIds: [],
     },
   });
 
@@ -104,7 +105,10 @@ export default function UsersPage() {
     try {
       const url = values.id ? `/api/users/${values.id}` : "/api/users";
       const method = values.id ? "PUT" : "POST";
-      const body = { ...values, roleIds: selectedRoles };
+      const body = { 
+        ...values, 
+        roleIds: selectedRoles 
+      };
       const response = await fetch(url, {
         method,
         headers: {
@@ -124,6 +128,7 @@ export default function UsersPage() {
 
       setIsDialogOpen(false);
       form.reset();
+      setSelectedRoles([]);
       queryClient.invalidateQueries({ queryKey: ["users"] });
     } catch (error) {
       toast({
@@ -137,8 +142,12 @@ export default function UsersPage() {
   // 处理编辑用户
   const handleEdit = (user: any) => {
     setEditingUser(user);
-    form.reset({ ...user, roleIds: user.roles?.map((r: any) => r.id) || [] });
-    setSelectedRoles(user.roles?.map((r: any) => r.id) || []);
+    const roleIds = user.roles?.map((r: any) => r.id) || [];
+    form.reset({ 
+      ...user, 
+      roleIds 
+    });
+    setSelectedRoles(roleIds);
     setIsDialogOpen(true);
   };
 
@@ -314,8 +323,12 @@ export default function UsersPage() {
       <div className="flex items-center gap-4">
         <Input
           placeholder="搜索用户..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          value={searchQuery}
+          onChange={(e) => {
+            const params = new URLSearchParams(searchParams);
+            params.set('search', e.target.value);
+            router.push(`?${params.toString()}`);
+          }}
           className="max-w-sm"
         />
       </div>
@@ -370,7 +383,7 @@ export default function UsersPage() {
       </div>
 
       <div className="mt-4">
-        <Pagination total={data?.total || 0} page={page} limit={limit} />
+        <Pagination total={data?.total || 0} page={currentPage} limit={pageLimit} />
       </div>
     </div>
   );

@@ -35,7 +35,7 @@ const roleFormSchema = z.object({
   id: z.number().optional(),
   name: z.string().min(2, "角色名称至少2个字符"),
   description: z.string().min(2, "角色描述至少2个字符"),
-  permissions: z.array(z.string()),
+  permissionIds: z.array(z.number()).optional(),
   userIds: z.array(z.number()).optional(),
 });
 
@@ -43,7 +43,7 @@ type RoleFormValues = z.infer<typeof roleFormSchema>;
 
 // 获取所有用户
 async function fetchUsers() {
-  const response = await fetch("/api/users?page=1&limit=1000");
+  const response = await fetch("/api/users?page=1&limit=100");
   if (!response.ok) throw new Error("获取用户失败");
   const data = await response.json();
   return data.data?.items || [];
@@ -51,7 +51,7 @@ async function fetchUsers() {
 
 // 获取所有权限
 async function fetchPermissions() {
-  const response = await fetch("/api/permissions?page=1&limit=1000");
+  const response = await fetch("/api/permissions?page=1&limit=100");
   if (!response.ok) throw new Error("获取权限失败");
   const data = await response.json();
   return data.data?.items || [];
@@ -63,7 +63,7 @@ export default function RolesPage() {
   const { toast } = useToast();
 
   const currentPage = parseInt(searchParams.get('page') || '1');
-  const pageLimit = parseInt(searchParams.get('limit') || '10');
+  const pageLimit = Math.min(parseInt(searchParams.get('limit') || '10'), 100);
   const searchQuery = searchParams.get('search') || '';
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -102,7 +102,8 @@ export default function RolesPage() {
     defaultValues: {
       name: "",
       description: "",
-      permissions: [],
+      permissionIds: [],
+      userIds: [],
     },
   });
 
@@ -111,7 +112,11 @@ export default function RolesPage() {
     try {
       const url = values.id ? `/api/roles/${values.id}` : "/api/roles";
       const method = values.id ? "PUT" : "POST";
-      const body = { ...values, userIds: selectedUsers, permissionIds: selectedPermissions };
+      const body = { 
+        ...values, 
+        userIds: selectedUsers, 
+        permissionIds: selectedPermissions 
+      };
       const response = await fetch(url, {
         method,
         headers: {
@@ -121,23 +126,38 @@ export default function RolesPage() {
       });
 
       if (!response.ok) {
-        throw new Error("保存角色失败");
+        const data = await response.json();
+        throw new Error(data.message || "保存角色失败");
       }
+
+      toast({
+        title: "成功",
+        description: values.id ? "角色更新成功" : "角色创建成功",
+      });
 
       setIsDialogOpen(false);
       form.reset();
       setSelectedUsers([]);
       setSelectedPermissions([]);
-      // TODO: 刷新角色列表
+      router.refresh();
     } catch (error) {
       console.error("保存角色失败:", error);
+      toast({
+        title: "错误",
+        description: error instanceof Error ? error.message : "保存角色失败",
+        variant: "destructive",
+      });
     }
   };
 
   // 处理编辑角色
   const handleEdit = (role: any) => {
     setEditingRole(role);
-    form.reset({ ...role, userIds: role.users?.map((u: any) => u.id) || [] });
+    form.reset({ 
+      ...role, 
+      userIds: role.users?.map((u: any) => u.id) || [],
+      permissionIds: role.permissions?.map((p: any) => p.id) || []
+    });
     setSelectedUsers(role.users?.map((u: any) => u.id) || []);
     setSelectedPermissions(role.permissions?.map((p: any) => p.id) || []);
     setIsDialogOpen(true);
@@ -148,7 +168,7 @@ export default function RolesPage() {
     if (!confirm('确定要删除该角色吗？')) return;
 
     try {
-      const response = await fetch(`/api/roles?id=${id}`, {
+      const response = await fetch(`/api/roles/${id}`, {
         method: 'DELETE',
       });
       const data = await response.json();
@@ -158,7 +178,6 @@ export default function RolesPage() {
           title: '删除成功',
           description: '角色已成功删除',
         });
-        // 重新获取角色列表
         router.refresh();
       } else {
         toast({
@@ -282,23 +301,41 @@ export default function RolesPage() {
                         : "请选择权限"}
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-60 p-2">
-                    <div className="flex flex-col gap-2 max-h-60 overflow-auto">
-                      {permissionsQuery.data?.map((permission: any) => (
-                        <label key={permission.id} className="flex items-center gap-2 cursor-pointer">
-                          <Checkbox
-                            checked={selectedPermissions.includes(permission.id)}
-                            onCheckedChange={(checked: boolean) => {
-                              setSelectedPermissions((prev) =>
-                                checked
-                                  ? [...prev, permission.id]
-                                  : prev.filter((id) => id !== permission.id)
-                              );
-                            }}
-                          />
-                          <span>{permission.name}</span>
-                        </label>
-                      ))}
+                  <PopoverContent className="w-80 p-2">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between px-2">
+                        <span className="text-sm font-medium">权限列表</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            if (selectedPermissions.length === permissionsQuery.data?.length) {
+                              setSelectedPermissions([]);
+                            } else {
+                              setSelectedPermissions(permissionsQuery.data?.map((p: any) => p.id) || []);
+                            }
+                          }}
+                        >
+                          {selectedPermissions.length === permissionsQuery.data?.length ? "取消全选" : "全选"}
+                        </Button>
+                      </div>
+                      <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-2">
+                        {permissionsQuery.data?.map((permission: any) => (
+                          <label key={permission.id} className="flex items-center gap-2 cursor-pointer hover:bg-accent p-2 rounded-md">
+                            <Checkbox
+                              checked={selectedPermissions.includes(permission.id)}
+                              onCheckedChange={(checked: boolean) => {
+                                setSelectedPermissions((prev) =>
+                                  checked
+                                    ? [...prev, permission.id]
+                                    : prev.filter((id) => id !== permission.id)
+                                );
+                              }}
+                            />
+                            <span className="text-sm">{permission.name}</span>
+                          </label>
+                        ))}
+                      </div>
                     </div>
                   </PopoverContent>
                 </Popover>
