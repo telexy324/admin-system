@@ -41,3 +41,11 @@ yarn-error.log*
 next-env.d.ts
 
 .idea
+
+/public/uploads
+
+# 忽略所有环境变量文件
+.env
+.env.*
+# 但保留 .env.example
+!.env.example

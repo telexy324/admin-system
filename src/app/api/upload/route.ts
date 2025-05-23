@@ -1,111 +1,90 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { writeFile } from 'fs/promises';
-import { join } from 'path';
-import { createClient } from '@supabase/supabase-js';
-import { v4 as uuidv4 } from 'uuid';
+import { NextRequest } from 'next/server';
+import { storageService } from '@/lib/storage';
+import { createResponse, createErrorResponse, handleApiError } from '@/lib/api-utils';
 import { PrismaClient } from '@prisma/client';
-import { auth } from '@/auth';
-import { authOptions, getUserFromRequest } from '@/lib/auth';
-import { createErrorResponse } from "@/lib/api-utils";
+import { getUserFromRequest } from '@/lib/auth';
 
 const prisma = new PrismaClient();
-
-// 创建 Supabase 客户端
-const supabase = process.env.STORAGE_TYPE === 'supabase' 
-  ? createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
-  : null;
 
 export async function POST(request: NextRequest) {
   try {
     const currentUser = await getUserFromRequest(request);
-    const userId = currentUser?.id
+    const userId = currentUser?.id;
     if (!userId) {
       return createErrorResponse("获取用户id失败");
     }
+
     const formData = await request.formData();
     const file = formData.get('file') as File;
-    
+
     if (!file) {
-      return NextResponse.json(
-        { error: '没有找到文件' },
-        { status: 400 }
-      );
+      return createErrorResponse('未找到文件');
     }
 
-    // 验证文件大小
-    const maxSize = parseInt(process.env.MAX_FILE_SIZE || '5242880');
+    // 验证文件类型
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      return createErrorResponse('不支持的文件类型');
+    }
+
+    // 验证文件大小（5MB）
+    const maxSize = 5 * 1024 * 1024;
     if (file.size > maxSize) {
-      return NextResponse.json(
-        { error: '文件大小超过限制' },
-        { status: 400 }
-      );
+      return createErrorResponse('文件大小超过限制');
     }
 
-    // 生成唯一文件名
-    const fileExtension = file.name.split('.').pop();
-    const fileName = `${uuidv4()}.${fileExtension}`;
-
-    let fileUrl: string;
-    let bucket: string | null = null;
-
-    if (process.env.STORAGE_TYPE === 'supabase') {
-      // 上传到 Supabase Storage
-      bucket = 'uploads';
-      const { data, error } = await supabase!.storage
-        .from(bucket)
-        .upload(fileName, file);
-
-      if (error) {
-        throw error;
-      }
-
-      // 获取文件公共URL
-      const { data: { publicUrl } } = supabase!.storage
-        .from(bucket)
-        .getPublicUrl(fileName);
-
-      fileUrl = publicUrl;
-    } else {
-      // 本地存储
-      const uploadDir = process.env.UPLOAD_DIR || 'public/uploads';
-      const bytes = await file.arrayBuffer();
-      const buffer = Buffer.from(bytes);
-      
-      // 确保上传目录存在
-      await writeFile(join(process.cwd(), uploadDir, fileName), buffer);
-      
-      fileUrl = `/${uploadDir}/${fileName}`;
-    }
+    // 上传文件
+    const filePath = await storageService.uploadFile(file, 'images');
+    const fileUrl = await storageService.getFileUrl(filePath);
 
     // 保存文件信息到数据库
     const storage = await prisma.storage.create({
       data: {
         name: file.name,
-        key: fileName,
+        key: filePath,
         url: fileUrl,
         size: file.size,
         type: file.type,
-        storageType: process.env.STORAGE_TYPE || 'local',
-        bucket: bucket,
+        storageType: process.env.FILE_STORAGE_TYPE || 'local',
+        bucket: process.env.FILE_STORAGE_TYPE === 'supabase' ? process.env.SUPABASE_STORAGE_BUCKET : null,
         userId,
       },
     });
 
-    return NextResponse.json({ 
+    return createResponse({
       url: fileUrl,
+      path: filePath,
       id: storage.id,
       name: file.name,
       size: file.size,
       type: file.type
     });
   } catch (error) {
-    console.error('文件上传错误:', error);
-    return NextResponse.json(
-      { error: '文件上传失败' },
-      { status: 500 }
-    );
+    return handleApiError(error);
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const path = searchParams.get('path');
+
+    if (!path) {
+      return createErrorResponse('未提供文件路径');
+    }
+
+    // 删除文件
+    await storageService.deleteFile(path);
+
+    // 删除数据库记录
+    await prisma.storage.deleteMany({
+      where: {
+        key: path
+      }
+    });
+
+    return createResponse(null, '文件删除成功');
+  } catch (error) {
+    return handleApiError(error);
   }
 } 
