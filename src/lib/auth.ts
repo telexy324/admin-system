@@ -3,13 +3,28 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { NextAuthConfig } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { compare } from "bcryptjs";
 import { getToken } from "next-auth/jwt";
 import type { NextRequest } from "next/server";
 import type { JWT } from "next-auth/jwt";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-jwt-key";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
+
+// 使用 jose 进行密码哈希
+async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+// 验证密码
+async function verifyPassword(password: string, hashedPassword: string): Promise<boolean> {
+  const hashedInput = await hashPassword(password);
+  return hashedInput === hashedPassword;
+}
 
 export async function signJWT(payload: any) {
   const token = await new SignJWT(payload)
@@ -101,7 +116,7 @@ export const authOptions: NextAuthConfig = {
           return null;
         }
 
-        const isPasswordValid = await compare(password, user.password);
+        const isPasswordValid = await verifyPassword(password, user.password);
 
         if (!isPasswordValid) {
           return null;
