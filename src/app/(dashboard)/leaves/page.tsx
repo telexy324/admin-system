@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,7 +50,7 @@ const leaveFormSchema = z.object({
 
 type LeaveFormValues = z.infer<typeof leaveFormSchema>;
 
-export default function LeavePage() {
+function LeaveContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -355,5 +355,13 @@ export default function LeavePage() {
         <Pagination total={data?.total || 0} page={currentPage} limit={pageLimit} />
       </div>
     </div>
+  );
+}
+
+export default function LeavePage() {
+  return (
+    <Suspense fallback={<div>加载中...</div>}>
+      <LeaveContent />
+    </Suspense>
   );
 } 

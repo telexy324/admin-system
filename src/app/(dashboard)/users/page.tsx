@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,7 +64,7 @@ async function fetchRoles() {
   return data.data?.items || [];
 }
 
-export default function UsersPage() {
+function UsersContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -386,5 +386,13 @@ export default function UsersPage() {
         <Pagination total={data?.total || 0} page={currentPage} limit={pageLimit} />
       </div>
     </div>
+  );
+}
+
+export default function UsersPage() {
+  return (
+    <Suspense fallback={<div>加载中...</div>}>
+      <UsersContent />
+    </Suspense>
   );
 } 

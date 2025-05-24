@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,7 +54,7 @@ async function fetchMenus() {
   };
 }
 
-export default function MenusPage() {
+function MenusContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -309,5 +309,13 @@ export default function MenusPage() {
         <Pagination total={data?.total || 0} page={currentPage} limit={pageLimit} />
       </div>
     </div>
+  );
+}
+
+export default function MenusPage() {
+  return (
+    <Suspense fallback={<div>加载中...</div>}>
+      <MenusContent />
+    </Suspense>
   );
 } 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,7 +61,7 @@ async function fetchPermissions() {
   };
 }
 
-export default function PermissionsPage() {
+function PermissionsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [page, setPage] = useState(1);
@@ -331,5 +331,13 @@ export default function PermissionsPage() {
         <Pagination total={data?.total || 0} page={currentPage} limit={pageLimit} />
       </div>
     </div>
+  );
+}
+
+export default function PermissionsPage() {
+  return (
+    <Suspense fallback={<div>加载中...</div>}>
+      <PermissionsContent />
+    </Suspense>
   );
 } 
