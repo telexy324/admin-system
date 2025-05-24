@@ -5,6 +5,8 @@ import { LoginDto } from "@/types/dtos";
 import { compare } from 'bcryptjs';
 import { sign } from 'jsonwebtoken';
 
+export const runtime = 'nodejs'
+
 export async function POST(request: NextRequest) {
   try {
     const { email, password } = await parseRequest(request, LoginDto);
