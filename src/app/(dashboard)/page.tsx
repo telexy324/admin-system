@@ -1,18 +1,13 @@
-'use client';
+import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+export default async function DashboardPage() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('token');
 
-export default function DashboardPage() {
-  const router = useRouter();
-
-  useEffect(() => {
-    // 检查是否已登录
-    const token = localStorage.getItem('token');
-    if (!token) {
-      router.push('/login');
-    }
-  }, [router]);
+  if (!token) {
+    redirect('/login');
+  }
 
   return (
     <div className="p-8">
