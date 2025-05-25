@@ -5,40 +5,6 @@ import { authConfig } from "@/auth.config";
 
 const prisma = new PrismaClient();
 
-// declare module "next-auth" {
-//   interface User {
-//     id: string;
-//     username: string;
-//     email: string;
-//     name: string;
-//     avatar?: string | null;
-//     status: number;
-//     roles: (Role & {
-//       permissions: Permission[];
-//       menus: Menu[];
-//     })[];
-//   }
-//
-//   interface Session {
-//     user: User;
-//   }
-// }
-//
-// declare module "next-auth/jwt" {
-//   interface JWT {
-//     id: string;
-//     username: string;
-//     email: string;
-//     name: string;
-//     avatar?: string | null;
-//     status: number;
-//     roles: (Role & {
-//       permissions: Permission[];
-//       menus: Menu[];
-//     })[];
-//   }
-// }
-
 export const {
   handlers: { GET, POST },
   auth,

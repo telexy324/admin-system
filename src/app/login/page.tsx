@@ -19,26 +19,59 @@ export default function LoginPage() {
     const password = formData.get('password') as string;
 
     try {
-      const result = await signIn('credentials', {
-        email,
-        password,
-        redirect: false,
-      });
+      const isMobile =
+        typeof navigator !== 'undefined' &&
+        /Mobi|Android|iPhone|iPad|iPod|Mobile|Tablet|webOS|BlackBerry|IEMobile|Opera Mini|ReactNative/i.test(
+          navigator.userAgent
+        );
+      if (isMobile) {
+        const result = await signIn('credentials', {
+          email,
+          password,
+          redirect: false,
+        });
 
-      if (result?.error) {
-        toast({
-          title: '登录失败',
-          description: result.error,
-          variant: 'destructive',
-        });
+        if (result?.error) {
+          toast({
+            title: '登录失败',
+            description: result.error,
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: '登录成功',
+            description: '正在跳转到仪表盘...',
+          });
+          router.replace('/dashboard'); // 手动跳转
+        }
       } else {
-        toast({
-          title: '登录成功',
-          description: '正在跳转到仪表盘...',
+        await signIn('credentials', {
+          email,
+          password,
+          redirect: true,
+          redirectTo: '/dashboard',
         });
-        router.replace('/dashboard');
       }
-    } catch (error) {
+      // const result = await signIn('credentials', {
+      //   email,
+      //   password,
+      //   redirect: false,
+      // });
+      //
+      // if (result?.error) {
+      //   toast({
+      //     title: '登录失败',
+      //     description: result.error,
+      //     variant: 'destructive',
+      //   });
+      // } else {
+      //   toast({
+      //     title: '登录成功',
+      //     description: '正在跳转到仪表盘...',
+      //   });
+      //   router.replace('/dashboard');
+      // }
+    } catch {
       toast({
         title: '登录失败',
         description: '发生未知错误，请稍后重试',
