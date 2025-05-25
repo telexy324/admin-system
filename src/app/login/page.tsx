@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
+import { signIn, getSession } from "next-auth/react";
 import { useToast } from "@/components/ui/use-toast";
 
 export default function LoginPage() {
@@ -18,59 +18,110 @@ export default function LoginPage() {
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
 
+    // try {
+    //   const isMobile =
+    //     typeof navigator !== 'undefined' &&
+    //     /Mobi|Android|iPhone|iPad|iPod|Mobile|Tablet|webOS|BlackBerry|IEMobile|Opera Mini|ReactNative/i.test(
+    //       navigator.userAgent
+    //     );
+    //   if (isMobile) {
+    //     const result = await signIn('credentials', {
+    //       email,
+    //       password,
+    //       redirect: false,
+    //     });
+    //
+    //     if (result?.error) {
+    //       toast({
+    //         title: '登录失败',
+    //         description: result.error,
+    //         variant: 'destructive',
+    //       });
+    //     } else {
+    //       toast({
+    //         title: '登录成功',
+    //         description: '正在跳转到仪表盘...',
+    //       });
+    //       router.replace('/dashboard'); // 手动跳转
+    //     }
+    //   } else {
+    //     await signIn('credentials', {
+    //       email,
+    //       password,
+    //       redirect: true,
+    //       redirectTo: '/dashboard',
+    //     });
+    //   }
+    //   // const result = await signIn('credentials', {
+    //   //   email,
+    //   //   password,
+    //   //   redirect: false,
+    //   // });
+    //   //
+    //   // if (result?.error) {
+    //   //   toast({
+    //   //     title: '登录失败',
+    //   //     description: result.error,
+    //   //     variant: 'destructive',
+    //   //   });
+    //   // } else {
+    //   //   toast({
+    //   //     title: '登录成功',
+    //   //     description: '正在跳转到仪表盘...',
+    //   //   });
+    //   //   router.replace('/dashboard');
+    //   // }
+    // } catch {
+    //   toast({
+    //     title: '登录失败',
+    //     description: '发生未知错误，请稍后重试',
+    //     variant: 'destructive',
+    //   });
+    // } finally {
+    //   setLoading(false);
+    // }
     try {
-      const isMobile =
-        typeof navigator !== 'undefined' &&
-        /Mobi|Android|iPhone|iPad|iPod|Mobile|Tablet|webOS|BlackBerry|IEMobile|Opera Mini|ReactNative/i.test(
-          navigator.userAgent
-        );
-      if (isMobile) {
-        const result = await signIn('credentials', {
-          email,
-          password,
-          redirect: false,
-        });
+      const result = await signIn('credentials', {
+        email,
+        password,
+        redirect: false, // 统一用 false，手动跳转更灵活
+      });
 
-        if (result?.error) {
-          toast({
-            title: '登录失败',
-            description: result.error,
-            variant: 'destructive',
-          });
-        } else {
-          toast({
-            title: '登录成功',
-            description: '正在跳转到仪表盘...',
-          });
-          router.replace('/dashboard'); // 手动跳转
-        }
-      } else {
-        await signIn('credentials', {
-          email,
-          password,
-          redirect: true,
-          redirectTo: '/dashboard',
+      if (result?.error) {
+        toast({
+          title: '登录失败',
+          description: result.error,
+          variant: 'destructive',
         });
+        return;
       }
-      // const result = await signIn('credentials', {
-      //   email,
-      //   password,
-      //   redirect: false,
-      // });
-      //
-      // if (result?.error) {
-      //   toast({
-      //     title: '登录失败',
-      //     description: result.error,
-      //     variant: 'destructive',
-      //   });
-      // } else {
-      //   toast({
-      //     title: '登录成功',
-      //     description: '正在跳转到仪表盘...',
-      //   });
-      //   router.replace('/dashboard');
-      // }
+
+      toast({
+        title: '登录成功',
+        description: '正在跳转到仪表盘...',
+      });
+
+      // 等待 session 写入成功，防止立即跳转被服务器判断为未登录
+      const MAX_RETRIES = 5;
+      let retries = 0;
+      let session = await getSession();
+
+      while (!session && retries < MAX_RETRIES) {
+        await new Promise((r) => setTimeout(r, 300));
+        session = await getSession();
+        retries++;
+      }
+
+      if (!session) {
+        toast({
+          title: '登录失败',
+          description: '会话未建立，请重试。',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      router.replace('/dashboard');
     } catch {
       toast({
         title: '登录失败',
