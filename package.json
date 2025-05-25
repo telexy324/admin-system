@@ -11,7 +11,8 @@
     "db:migrate:dev:create": "prisma migrate dev --create-only",
     "db:generate": "prisma generate",
     "db:seed": "prisma db seed",
-    "db:migrate:deploy": "DEBUG=\"*\" dotenv -e .env.production -- prisma migrate deploy"
+    "db:migrate:deploy": "DEBUG=\"*\" dotenv -e .env.production -- prisma migrate deploy",
+    "db:seed:deploy": "DEBUG=\"*\" dotenv -e .env.production -- prisma db seed"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.9.1",
