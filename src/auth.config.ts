@@ -16,7 +16,7 @@ export const authConfig = {
       },
       async authorize(credentials: Partial<Record<"email" | "password", unknown>>) {
         if (!credentials?.email || !credentials?.password) {
-          return null;
+          throw new Error("请输入邮箱和密码");
         }
 
         const user = await prisma.user.findUnique({
@@ -32,7 +32,7 @@ export const authConfig = {
         });
 
         if (!user) {
-          return null;
+          throw new Error("用户不存在");
         }
 
         const isPasswordValid = await bcrypt.compare(
@@ -41,7 +41,7 @@ export const authConfig = {
         );
 
         if (!isPasswordValid) {
-          return null;
+          throw new Error("密码错误");
         }
 
         return {
