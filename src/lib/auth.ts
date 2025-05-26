@@ -153,7 +153,7 @@ export async function getUserFromRequest(req: NextRequest): Promise<JWT | null> 
   const secret = process.env.AUTH_SECRET;
   console.log("secret: ", secret);
   if (!secret) throw new Error("JWT_SECRET is not set");
-
+  console.log("cookies: ", req.cookies);
   // 从 cookie 中直接获取 token
   const sessionToken = req.cookies.get("authjs.session-token")?.value;
   console.log("Session token from cookie:", sessionToken);
