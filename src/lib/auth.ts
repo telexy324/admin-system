@@ -49,7 +49,10 @@ export async function verifyJWT(
 
 export async function getCurrentUser() {
   const cookieStore = await cookies();
-  const token = cookieStore.get("next-auth.session-token")?.value;
+  const token = cookieStore.get("authjs.session-token")?.value;
+  console.log("Cookie store:", cookieStore.getAll());
+  console.log("Token from cookie:", token);
+  
   if (!token) return null;
 
   const payload = await verifyJWT(token);
@@ -151,20 +154,21 @@ export async function getUserFromRequest(req: NextRequest): Promise<JWT | null> 
   console.log("secret: ", secret);
   if (!secret) throw new Error("JWT_SECRET is not set");
 
-  // 优先从 cookie 中读取 token（用于 Next.js Web）
-  const tokenFromCookie = await getToken({ 
-    req, 
-    secret,
-    // secureCookie: process.env.NODE_ENV === "production",
-    // cookieName: "next-auth.session-token"
-  });
-  
-  console.log("Token from cookie:", tokenFromCookie);
-  console.log("Request cookies:", req.cookies.getAll());
-  console.log("Request headers:", Object.fromEntries(req.headers.entries()));
+  // 从 cookie 中直接获取 token
+  const sessionToken = req.cookies.get("authjs.session-token")?.value;
+  console.log("Session token from cookie:", sessionToken);
 
-  if (tokenFromCookie && tokenFromCookie.id) {
-    return tokenFromCookie as JWT;
+  if (sessionToken) {
+    try {
+      const { payload } = await jwtVerify(
+        sessionToken,
+        new TextEncoder().encode(secret)
+      );
+      return payload as JWT;
+    } catch (err) {
+      console.error("JWT 验证失败:", err);
+      return null;
+    }
   }
 
   // Fallback：从 Authorization: Bearer 头部读取（用于 React Native）
@@ -176,8 +180,6 @@ export async function getUserFromRequest(req: NextRequest): Promise<JWT | null> 
         token,
         new TextEncoder().encode(secret)
       );
-
-      // 返回 JWT 类型
       return payload as JWT;
     } catch (err) {
       console.error("JWT 验证失败:", err);
