@@ -125,9 +125,10 @@ export async function getServerSession() {
 export async function getUserFromRequest(req: NextRequest): Promise<JWT | null> {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error("JWT_SECRET is not set");
-
+  console.log('cookies', req.cookies.getAll());
   // 优先从 cookie 中读取 token（用于 Next.js Web）
   const tokenFromCookie = await getToken({ req, secret });
+  console.log("Token from cookie:", tokenFromCookie);
   if (tokenFromCookie && tokenFromCookie.id) {
     return tokenFromCookie as JWT;
   }
