@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     })
       .setProtectedHeader({ alg: "HS256" })
       .setExpirationTime("24h")
-      .sign(new TextEncoder().encode(process.env.JWT_SECRET || "your-secret-key"));
+      .sign(new TextEncoder().encode(process.env.AUTH_SECRET || "your-secret-key"));
 
     // 创建响应
     const response = createResponse({

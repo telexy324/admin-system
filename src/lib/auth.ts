@@ -7,7 +7,7 @@ import type { NextRequest } from "next/server";
 import type { JWT } from "next-auth/jwt";
 import bcrypt from "bcryptjs";
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-jwt-key";
+const AUTH_SECRET = process.env.AUTH_SECRET || "your-super-secret-jwt-key";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
 // 使用 bcrypt 验证密码
@@ -29,7 +29,7 @@ export async function signJWT(payload: any) {
   const token = await new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime(JWT_EXPIRES_IN)
-    .sign(new TextEncoder().encode(JWT_SECRET));
+    .sign(new TextEncoder().encode(AUTH_SECRET));
   return token;
 }
 
@@ -37,7 +37,7 @@ export async function verifyJWT(token: string) {
   try {
     const { payload } = await jwtVerify(
       token,
-      new TextEncoder().encode(JWT_SECRET)
+      new TextEncoder().encode(AUTH_SECRET)
     );
     return payload;
   } catch (error) {
@@ -123,8 +123,8 @@ export async function getServerSession() {
 }
 
 export async function getUserFromRequest(req: NextRequest): Promise<JWT | null> {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) throw new Error("JWT_SECRET is not set");
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) throw new Error("AUTH_SECRET is not set");
   console.log('cookies', req.cookies.getAll());
   // 优先从 cookie 中读取 token（用于 Next.js Web）
   const tokenFromCookie = await getToken({ req, secret });
