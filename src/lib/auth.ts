@@ -1,10 +1,9 @@
-import { SignJWT, jwtVerify } from "jose";
+import { jwtVerify, SignJWT } from "jose";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { NextAuthConfig } from "next-auth";
+import type { JWT, JWTEncodeParams, JWTDecodeParams } from "next-auth/jwt";
 import { getToken } from "next-auth/jwt";
 import type { NextRequest } from "next/server";
-import type { JWT } from "next-auth/jwt";
 import bcrypt from "bcryptjs";
 
 const AUTH_SECRET = process.env.AUTH_SECRET || "your-super-secret-jwt-key";
@@ -25,22 +24,25 @@ async function hashPassword(password: string): Promise<string> {
     .join('');
 }
 
-export async function signJWT(payload: any) {
-  const token = await new SignJWT(payload)
+export async function signJWT(
+  payload: any,
+  secret: string = AUTH_SECRET,
+  expiresIn: number | string = JWT_EXPIRES_IN
+): Promise<string> {
+  return await new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
-    .setExpirationTime(JWT_EXPIRES_IN)
-    .sign(new TextEncoder().encode(AUTH_SECRET));
-  return token;
+    .setExpirationTime(typeof expiresIn === "number" ? `${expiresIn}s` : expiresIn)
+    .sign(new TextEncoder().encode(secret));
 }
 
-export async function verifyJWT(token: string) {
+export async function verifyJWT(
+  token: string,
+  secret: string = AUTH_SECRET
+): Promise<any | null> {
   try {
-    const { payload } = await jwtVerify(
-      token,
-      new TextEncoder().encode(AUTH_SECRET)
-    );
+    const { payload } = await jwtVerify(token, new TextEncoder().encode(secret));
     return payload;
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -122,6 +124,28 @@ export async function getServerSession() {
   };
 }
 
+// ✅ encode 函数
+export async function encode(params: JWTEncodeParams<JWT>): Promise<string> {
+  const { token, secret, maxAge } = params;
+  if (!token) throw new Error("Missing token");
+
+  const secretStr = Array.isArray(secret) ? secret[0] : secret;
+
+  // 使用已有 signJWT，只是要传 secret 和 maxAge
+  return await signJWT(token, secretStr, maxAge);
+}
+
+// ✅ decode 函数
+export async function decode(params: JWTDecodeParams): Promise<JWT | null> {
+  const { token, secret } = params;
+  if (!token) return null;
+
+  const secretStr = Array.isArray(secret) ? secret[0] : secret;
+
+  // 使用已有 verifyJWT，传入 secret
+  return await verifyJWT(token, secretStr) as JWT;
+}
+
 export async function getUserFromRequest(req: NextRequest): Promise<JWT | null> {
   const secret = process.env.AUTH_SECRET;
   console.log("secret: ", secret);
@@ -132,7 +156,7 @@ export async function getUserFromRequest(req: NextRequest): Promise<JWT | null> 
     req, 
     secret,
     secureCookie: process.env.NODE_ENV === "production",
-    cookieName: "next-auth.session-token"
+    // cookieName: "next-auth.session-token"
   });
   
   console.log("Token from cookie:", tokenFromCookie);
