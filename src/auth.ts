@@ -48,5 +48,6 @@ export const {
       return session;
     },
   },
-  ...authConfig
+  ...authConfig,
+  secret: process.env.AUTH_SECRET,
 }); 

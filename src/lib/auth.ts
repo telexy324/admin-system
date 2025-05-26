@@ -155,7 +155,7 @@ export async function getUserFromRequest(req: NextRequest): Promise<JWT | null> 
   const tokenFromCookie = await getToken({ 
     req, 
     secret,
-    secureCookie: process.env.NODE_ENV === "production",
+    // secureCookie: process.env.NODE_ENV === "production",
     // cookieName: "next-auth.session-token"
   });
   
