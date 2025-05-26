@@ -47,9 +47,19 @@ export async function verifyJWT(
   }
 }
 
+// 获取 session token 的 cookie 名称
+function getSessionTokenCookieName() {
+  // 如果是生产环境，使用 __Secure- 前缀
+  if (process.env.NODE_ENV === 'production') {
+    return '__Secure-authjs.session-token';
+  }
+  // 本地开发环境使用普通名称
+  return 'authjs.session-token';
+}
+
 export async function getCurrentUser() {
   const cookieStore = await cookies();
-  const token = cookieStore.get("authjs.session-token")?.value;
+  const token = cookieStore.get(getSessionTokenCookieName())?.value;
   console.log("Cookie store:", cookieStore.getAll());
   console.log("Token from cookie:", token);
   
