@@ -56,4 +56,22 @@ export const authConfig = {
       },
     }),
   ],
+  pages: {
+    signIn: "/login",
+    error: "/login",
+  },
+  cookies: {
+    sessionToken: {
+      name: "next-auth.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+        domain: process.env.NODE_ENV === "production" ? ".your-domain.com" : undefined
+      }
+    }
+  },
+  secret: process.env.AUTH_SECRET,
+  debug: process.env.NODE_ENV === "development"
 } satisfies NextAuthConfig; 
