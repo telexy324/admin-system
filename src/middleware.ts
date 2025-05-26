@@ -21,6 +21,7 @@ const publicPaths = [
 
 export async function middleware(req: NextRequest) {
   const user = await getUserFromRequest(req);
+  console.log(user);
   const isLoggedIn = !!user;
 
   const { pathname } = req.nextUrl;
